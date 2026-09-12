@@ -49,25 +49,13 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
-	<key>UTExportedTypeDeclarations</key>
-	<array>
-		<dict>
-			<key>UTTypeIdentifier</key>
-			<string>com.amoplayer.amo</string>
-			<key>UTTypeDescription</key>
-			<string>AMO encrypted lesson</string>
-			<key>UTTypeConformsTo</key>
-			<array>
-				<string>public.data</string>
-			</array>
-			<key>UTTypeTagSpecification</key>
-			<dict>
-				<key>public.filename-extension</key>
-				<array>
-					<string>amo</string>
-				</array>
-			</dict>
-		</dict>
-	</array>
+	<!-- No UTExportedTypeDeclarations and no CFBundleDocumentTypes on
+	     purpose. A lesson container is identified by its magic bytes
+	     ("AMOENC01"), not by its filename, and the teacher chooses the
+	     extension freely. iOS routes files to apps by extension/UTI, so
+	     no declaration here could ever cover the real set of files - it
+	     would only make "Open with AMO Player" appear for the one
+	     extension that happened to be listed. Import goes through the
+	     in-app file picker (FileType.any), which has no such limit. -->
 </dict>
 </plist>
