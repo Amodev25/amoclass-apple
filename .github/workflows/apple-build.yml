@@ -99,11 +99,17 @@ jobs:
         working-directory: amoclass_player_apple
         run: flutter pub get
 
-      # --no-codesign is what makes this free: it builds a real iOS binary
-      # without any certificate, provisioning profile or Apple account.
-      - name: Build iOS (unsigned, simulator)
+      # No --no-codesign here, deliberately. A simulator build needs no
+      # certificate, profile or Apple account on its own, but it DOES need the
+      # embedded frameworks to carry an ad-hoc signature: dyld refuses to load
+      # an unsigned library even in the simulator. --no-codesign passes
+      # CODE_SIGNING_ALLOWED=NO, which suppresses that local signature too, and
+      # the app then dies at launch on "Trying to load an unsigned library".
+      # The flag belongs on the device archive below, which a device farm
+      # re-signs anyway.
+      - name: Build iOS (simulator)
         working-directory: amoclass_player_apple
-        run: flutter build ios --debug --simulator --no-codesign
+        run: flutter build ios --debug --simulator
 
       - name: Verify the native decryptor linked in
         working-directory: amoclass_player_apple
