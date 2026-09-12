@@ -12,15 +12,15 @@
 #import <AVFoundation/AVFoundation.h>
 #endif
 
-static NSString *const kAntiCaptureChannel = @"com.amoplayer/anti_capture";
-static NSString *const kFocusChannel       = @"com.amoplayer/focus_mode";
-static NSString *const kStreamChannel      = @"com.amoplayer/amo_stream";
-static NSString *const kAudioChannel       = @"com.amoplayer/audio_output";
+static NSString *const kAntiCaptureChannel = @"com.lockclass/anti_capture";
+static NSString *const kFocusChannel       = @"com.lockclass/focus_mode";
+static NSString *const kStreamChannel      = @"com.lockclass/amo_stream";
+static NSString *const kAudioChannel       = @"com.lockclass/audio_output";
 
 /* Keychain account under which the persistent device id is stored. Unlike
    identifierForVendor, a Keychain item survives app deletion, so a licence
    stays bound to the same device across a reinstall. */
-static NSString *const kDeviceIdService = @"com.amoplayer.deviceid";
+static NSString *const kDeviceIdService = @"com.lockclass.deviceid";
 static NSString *const kDeviceIdAccount = @"device_id";
 
 @interface AmoPlatformPlugin ()

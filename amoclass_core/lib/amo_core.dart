@@ -1,4 +1,5 @@
-/// AMO Core — shared library for AMO Player apps (Windows & Android).
+/// AMO Core — shared library for the Lockclass player apps
+/// (Windows, Android, iOS and macOS).
 ///
 /// Contains encryption constants, decryption logic, data models,
 /// typed exceptions, and shared service interfaces.

@@ -1,5 +1,5 @@
 name: amo_core
-description: Shared core library for AMO Player (Windows & Android)
+description: Shared core library for the Lockclass players (Windows, Android, Apple)
 version: 1.0.0
 publish_to: 'none'
 

@@ -9,7 +9,7 @@ class AmoL10nEn extends AmoL10n {
   AmoL10nEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'AMO Player';
+  String get appTitle => 'Lockclass';
 
   @override
   String get actionCancel => 'Cancel';
@@ -131,15 +131,15 @@ class AmoL10nEn extends AmoL10n {
 
   @override
   String get libraryNoVideosHint =>
-      'Import your encrypted AMO videos to get started';
+      'Import your encrypted Lockclass videos to get started';
 
   @override
   String get libraryNoFilesHint =>
-      'Import your encrypted AMO PDFs to get started';
+      'Import your encrypted Lockclass PDFs to get started';
 
   @override
   String get libraryEmptyFolderHint =>
-      'Import encrypted AMO files to get started';
+      'Import encrypted Lockclass files to get started';
 
   @override
   String get libraryNoVideosInFolder => 'No videos in this folder';
@@ -170,7 +170,8 @@ class AmoL10nEn extends AmoL10n {
   }
 
   @override
-  String get libraryImportNoneValid => 'No valid AMO encrypted files found';
+  String get libraryImportNoneValid =>
+      'No valid Lockclass encrypted files found';
 
   @override
   String get libraryPreparing => 'Preparing...';

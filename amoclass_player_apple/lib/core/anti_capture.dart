@@ -19,7 +19,7 @@ import 'package:flutter/services.dart';
 /// Treat [isSupported] as "is real prevention available", which is why it is
 /// false on iOS even though [enableProtection] still does useful work there.
 class AntiCapture {
-  static const _channel = MethodChannel('com.amoplayer/anti_capture');
+  static const _channel = MethodChannel('com.lockclass/anti_capture');
 
   /// Enable anti-screen capture.
   ///

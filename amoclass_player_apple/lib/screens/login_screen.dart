@@ -253,7 +253,7 @@ class _LoginScreenState extends State<LoginScreen>
             const SizedBox(height: 20),
 
             const Text(
-              'AMO Player',
+              'Lockclass',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 28,

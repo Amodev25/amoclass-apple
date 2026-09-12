@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 /// Backed by a native MethodChannel implemented in
 /// `android/app/src/main/kotlin/.../MainActivity.kt`.
 class AudioOutputPlatform {
-  static const _native = MethodChannel('com.amoplayer/audio_output');
+  static const _native = MethodChannel('com.lockclass/audio_output');
 
   /// True when private-listening hardware (wired / Bluetooth / USB headphones
   /// or headset) is connected as an active output.

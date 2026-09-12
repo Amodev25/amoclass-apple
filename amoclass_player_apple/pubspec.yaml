@@ -1,5 +1,5 @@
 name: amo_player_apple
-description: "AMO Player for iOS & macOS - Encrypted media player"
+description: "Lockclass for iOS & macOS - Encrypted media player"
 publish_to: 'none'
 
 version: 1.1.0+2

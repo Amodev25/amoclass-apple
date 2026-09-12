@@ -80,7 +80,7 @@ class AmoPlayerApp extends StatelessWidget {
 
   Widget _app(BuildContext context) {
     return MaterialApp(
-      title: 'AMO Player',
+      title: 'Lockclass',
       debugShowCheckedModeBanner: false,
       locale: LocaleService.instance.locale,
       supportedLocales: LocaleService.supportedLocales,
@@ -214,7 +214,7 @@ class _SplashGateState extends State<SplashGate> {
               ),
               const SizedBox(height: 24),
               const Text(
-                'AMO Player',
+                'Lockclass',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 24,

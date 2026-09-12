@@ -20,7 +20,7 @@ import 'package:flutter/services.dart';
 ///   on iOS and [isSupported] is false, so the UI can hide the feature instead
 ///   of showing a lock that does not lock.
 class FocusModePlatform {
-  static const _channel = MethodChannel('com.amoplayer/focus_mode');
+  static const _channel = MethodChannel('com.lockclass/focus_mode');
 
   /// True only where the app can actually enforce a lock. False on iOS.
   static bool get isSupported => Platform.isMacOS;

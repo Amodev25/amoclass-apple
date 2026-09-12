@@ -126,7 +126,7 @@ class StoredCourse {
 /// Manages the signed session file, offline counters, and session verification.
 /// Uses HMAC-signed JSON to prevent tampering.
 class SessionService {
-  static const _channel = MethodChannel('com.amoplayer/anti_capture');
+  static const _channel = MethodChannel('com.lockclass/anti_capture');
   static const _fileName = '.amo_session'; // legacy plaintext (migrated away)
 
   /// Keystore-backed secure storage for the session blob and signing secret.

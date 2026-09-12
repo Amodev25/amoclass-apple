@@ -100,7 +100,7 @@ abstract class AmoL10n {
   /// Window title and login header. The product name is not translated.
   ///
   /// In en, this message translates to:
-  /// **'AMO Player'**
+  /// **'Lockclass'**
   String get appTitle;
 
   /// No description provided for @actionCancel.
@@ -328,19 +328,19 @@ abstract class AmoL10n {
   /// No description provided for @libraryNoVideosHint.
   ///
   /// In en, this message translates to:
-  /// **'Import your encrypted AMO videos to get started'**
+  /// **'Import your encrypted Lockclass videos to get started'**
   String get libraryNoVideosHint;
 
   /// No description provided for @libraryNoFilesHint.
   ///
   /// In en, this message translates to:
-  /// **'Import your encrypted AMO PDFs to get started'**
+  /// **'Import your encrypted Lockclass PDFs to get started'**
   String get libraryNoFilesHint;
 
   /// No description provided for @libraryEmptyFolderHint.
   ///
   /// In en, this message translates to:
-  /// **'Import encrypted AMO files to get started'**
+  /// **'Import encrypted Lockclass files to get started'**
   String get libraryEmptyFolderHint;
 
   /// No description provided for @libraryNoVideosInFolder.
@@ -394,7 +394,7 @@ abstract class AmoL10n {
   /// No description provided for @libraryImportNoneValid.
   ///
   /// In en, this message translates to:
-  /// **'No valid AMO encrypted files found'**
+  /// **'No valid Lockclass encrypted files found'**
   String get libraryImportNoneValid;
 
   /// No description provided for @libraryPreparing.

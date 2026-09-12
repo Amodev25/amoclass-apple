@@ -7,7 +7,7 @@ import 'package:media_kit/media_kit.dart';
 /// Registers the "amo://" custom protocol with mpv so that .amo files
 /// are decrypted inside the player process — no HTTP server, no temp files.
 class AmoNativeBridge {
-  static const _channel = MethodChannel('com.amoplayer/amo_stream');
+  static const _channel = MethodChannel('com.lockclass/amo_stream');
 
   /// Register the amo:// protocol with the current mpv player instance.
   /// Must be called after Player() is created but before opening media.

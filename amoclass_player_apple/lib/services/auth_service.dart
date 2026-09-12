@@ -90,7 +90,7 @@ class AuthService {
       'https://amo-student-worker.doctoramr0101.workers.dev';
   static const String workerUrl =
       'https://amo-student-worker.doctoramr0101.workers.dev';
-  static const _channel = MethodChannel('com.amoplayer/anti_capture');
+  static const _channel = MethodChannel('com.lockclass/anti_capture');
 
   /// Session tokens by studentId — one per enrolment the app holds.
   ///

@@ -9,7 +9,7 @@ class AmoL10nAr extends AmoL10n {
   AmoL10nAr([String locale = 'ar']) : super(locale);
 
   @override
-  String get appTitle => 'AMO Player';
+  String get appTitle => 'Lockclass';
 
   @override
   String get actionCancel => 'إلغاء';
@@ -129,13 +129,13 @@ class AmoL10nAr extends AmoL10n {
   String get libraryNoFiles => 'لا توجد ملفات بعد';
 
   @override
-  String get libraryNoVideosHint => 'استورد فيديوهات AMO المشفَّرة لتبدأ';
+  String get libraryNoVideosHint => 'استورد فيديوهات Lockclass المشفَّرة لتبدأ';
 
   @override
   String get libraryNoFilesHint => 'استورد ملفات PDF المشفَّرة لتبدأ';
 
   @override
-  String get libraryEmptyFolderHint => 'استورد ملفات AMO المشفَّرة لتبدأ';
+  String get libraryEmptyFolderHint => 'استورد ملفات Lockclass المشفَّرة لتبدأ';
 
   @override
   String get libraryNoVideosInFolder => 'لا توجد فيديوهات في هذا المجلّد';
@@ -166,7 +166,8 @@ class AmoL10nAr extends AmoL10n {
   }
 
   @override
-  String get libraryImportNoneValid => 'لم يُعثر على ملفات AMO مشفَّرة صالحة';
+  String get libraryImportNoneValid =>
+      'لم يُعثر على ملفات Lockclass مشفَّرة صالحة';
 
   @override
   String get libraryPreparing => 'جارٍ التحضير...';

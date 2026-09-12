@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "appTitle": "AMO Player",
+  "appTitle": "Lockclass",
   "@appTitle": {
     "description": "Window title and login header. The product name is not translated."
   },
@@ -55,9 +55,9 @@
   "libraryMyFiles": "My Files",
   "libraryNoVideos": "No videos yet",
   "libraryNoFiles": "No files yet",
-  "libraryNoVideosHint": "Import your encrypted AMO videos to get started",
-  "libraryNoFilesHint": "Import your encrypted AMO PDFs to get started",
-  "libraryEmptyFolderHint": "Import encrypted AMO files to get started",
+  "libraryNoVideosHint": "Import your encrypted Lockclass videos to get started",
+  "libraryNoFilesHint": "Import your encrypted Lockclass PDFs to get started",
+  "libraryEmptyFolderHint": "Import encrypted Lockclass files to get started",
   "libraryNoVideosInFolder": "No videos in this folder",
   "libraryNoFilesInFolder": "No files in this folder",
   "libraryLoading": "Loading library...",
@@ -83,7 +83,7 @@
       }
     }
   },
-  "libraryImportNoneValid": "No valid AMO encrypted files found",
+  "libraryImportNoneValid": "No valid Lockclass encrypted files found",
   "libraryPreparing": "Preparing...",
   "libraryAnotherCourse": "Another Course",
   "libraryFocus": "Focus",
