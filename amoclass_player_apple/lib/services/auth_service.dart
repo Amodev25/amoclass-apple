@@ -6,6 +6,7 @@ import 'session_service.dart';
 import 'library_service.dart';
 import '../core/decryption_service.dart';
 import '../core/amo_native_bridge.dart';
+import '../core/platform_identity.dart';
 
 /// Represents one course session a student belongs to.
 class CourseSession {
@@ -187,7 +188,7 @@ class AuthService {
         jsonEncode({
           'serverCode': serverCode.trim(),
           'password': password,
-          'platform': 'android',
+          'platform': PlatformIdentity.current,
           'deviceId': deviceId,
           if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
         }),
@@ -262,7 +263,7 @@ class AuthService {
         jsonEncode({
           'serverCode': serverCode.trim(),
           'password': password,
-          'platform': 'android',
+          'platform': PlatformIdentity.current,
           'deviceId': deviceId,
           if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
         }),

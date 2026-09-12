@@ -11,6 +11,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'auth_service.dart';
 import '../screens/login_screen.dart';
+import '../core/platform_identity.dart';
 
 /// Result of a session check.
 enum SessionResult {
@@ -523,7 +524,7 @@ class SessionService {
       request.write(
         jsonEncode({
           'deviceId': deviceId,
-          'platform': 'android',
+          'platform': PlatformIdentity.current,
         }),
       );
 
@@ -898,7 +899,7 @@ class SessionService {
         jsonEncode({
           'serverCode': course.serverCode,
           'password': password,
-          'platform': 'android',
+          'platform': PlatformIdentity.current,
           'deviceId': deviceId,
         }),
       );
