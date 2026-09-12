@@ -356,8 +356,9 @@ class _LoginScreenState extends State<LoginScreen>
               icon: Icons.lock_outline,
               isPassword: true,
               validator: (v) {
-                if (v == null || v.isEmpty)
+                if (v == null || v.isEmpty) {
                   return AmoL10n.of(context).loginPasswordRequired;
+                }
                 return null;
               },
             ),

@@ -2123,7 +2123,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                       ),
                       child: ListView.separated(
                         itemCount: folders.length + items.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           if (index < folders.length) {
                             return _buildFolderCard(

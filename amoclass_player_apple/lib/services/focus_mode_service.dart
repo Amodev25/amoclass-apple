@@ -35,8 +35,9 @@ class FocusModeService extends ChangeNotifier {
   }
 
   Duration get remainingEmergencyTime {
-    if (!_isEmergencyActive || _emergencyStartTime == null)
+    if (!_isEmergencyActive || _emergencyStartTime == null) {
       return Duration.zero;
+    }
     final elapsed = DateTime.now().difference(_emergencyStartTime!);
     final remaining = _emergencyDuration - elapsed;
     return remaining.isNegative ? Duration.zero : remaining;

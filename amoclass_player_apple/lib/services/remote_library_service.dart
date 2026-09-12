@@ -281,8 +281,9 @@ class RemoteLibraryService {
     try {
       // Step 1: get presigned URL
       final url = await getDownloadUrl(file.id);
-      if (url == null)
+      if (url == null) {
         throw Exception(LocaleService.instance.strings.errDownloadUrlFailed);
+      }
 
       // Step 2: choose download path
       final dir = await getApplicationDocumentsDirectory();

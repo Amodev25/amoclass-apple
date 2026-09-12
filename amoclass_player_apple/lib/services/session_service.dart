@@ -946,8 +946,9 @@ class SessionService {
         if (kDebugMode) debugPrint('[AMO] Session blocked reason: $reason');
         return LocaleService.instance.strings.errSessionExpiredLogin;
       case 'platform_changed':
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('[AMO] Session blocked reason: platform_changed');
+        }
         return LocaleService.instance.strings.errPlatformLocked;
       case 'course_expired':
         return LocaleService.instance.strings.errCourseAccessExpired;

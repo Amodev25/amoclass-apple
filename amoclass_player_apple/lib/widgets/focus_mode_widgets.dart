@@ -702,7 +702,7 @@ class _FocusModeSetupDialogState extends State<_FocusModeSetupDialog> {
               value: _enableDnd,
               onChanged: (_) => _toggleDnd(),
               activeTrackColor: Colors.white,
-              activeColor: Colors.black,
+              activeThumbColor: Colors.black,
             ),
           ],
         ),
