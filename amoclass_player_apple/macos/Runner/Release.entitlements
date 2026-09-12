@@ -2,7 +2,29 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!--
+	  The App Sandbox is deliberately OFF.
+
+	  Focus Mode depends on NSApplicationPresentationDisableProcessSwitching,
+	  and the sandbox blocks exactly that option: a sandboxed build still hides
+	  the Dock and menu bar, so the lock LOOKS applied while Cmd+Tab keeps
+	  working. A lock that silently half-works is worse than one that reports
+	  failure, and Focus Mode is the point of this app.
+
+	  The cost is the Mac App Store, which requires the sandbox. That is
+	  already the plan: macOS ships as a Developer ID signed, notarised DMG
+	  straight from the site, the same way the Windows build and the Android
+	  APK are distributed. Turning the sandbox back on means dropping Focus
+	  Mode on macOS, not just flipping this key.
+
+	  With no sandbox there is also no need for files.user-selected entitlements
+	  — reading the student's .amo files is unrestricted.
+	-->
 	<key>com.apple.security.app-sandbox</key>
+	<false/>
+
+	<!-- Login, licence verification and the online library all call the API. -->
+	<key>com.apple.security.network.client</key>
 	<true/>
 </dict>
 </plist>
