@@ -162,8 +162,11 @@ static NSString *const kDeviceIdAccount = @"device_id";
 /** Hardware UUID of the Mac — the closest analogue to Android's ANDROID_ID. */
 - (NSString *)platformUUID {
   /* kIOMainPortDefault is macOS 12+; kIOMasterPortDefault is the older
-     spelling. Both are MACH_PORT_NULL, so pick whichever the SDK defines. */
-#if defined(MAC_OS_VERSION_12_0) &&     __MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_VERSION_12_0
+     spelling, deprecated but still present. Both are MACH_PORT_NULL.
+     Select on the DEPLOYMENT TARGET, not the SDK: building with a current SDK
+     against a 10.15 target must still emit the old symbol, or the app links
+     against something that does not exist on the OS it claims to support. */
+#if defined(MAC_OS_VERSION_12_0) && __MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_VERSION_12_0
   mach_port_t mainPort = kIOMainPortDefault;
 #else
   mach_port_t mainPort = kIOMasterPortDefault;

@@ -72,6 +72,30 @@ jobs:
         working-directory: amoclass_player_apple
         run: flutter build macos --debug
 
+
+      # A green build does not prove the decryptor is in the binary: if the
+      # podspec's source glob missed the C files, the app would still link and
+      # only fail at playback. Check the symbols are actually there.
+      - name: Verify the native decryptor linked in
+        working-directory: amoclass_player_apple
+        run: |
+          set -uo pipefail
+          ROOT="build/macos/Build/Products/Debug"
+          echo "Scanning every Mach-O binary under $ROOT"
+          # The plugin may be linked into the app binary or live in its own
+          # framework under Frameworks/, depending on use_frameworks!, so scan
+          # the whole bundle rather than guessing which file holds the symbols.
+          SYMS=$(find "$ROOT" -type f                  | while read -r f; do file "$f" | grep -q Mach-O && nm -a "$f" 2>/dev/null; done)
+          rc=0
+          for sym in _amo_register_protocol _amo_open _amo_set_credentials; do
+            if printf '%s' "$SYMS" | grep -q -- "$sym"; then
+              echo "  ok       $sym"
+            else
+              echo "  MISSING  $sym" >&2
+              rc=1
+            fi
+          done
+          exit $rc
       - name: Upload macOS app
         if: success()
         uses: actions/upload-artifact@v4
@@ -112,6 +136,30 @@ jobs:
         working-directory: amoclass_player_apple
         run: flutter build ios --debug --simulator --no-codesign
 
+
+      # A green build does not prove the decryptor is in the binary: if the
+      # podspec's source glob missed the C files, the app would still link and
+      # only fail at playback. Check the symbols are actually there.
+      - name: Verify the native decryptor linked in
+        working-directory: amoclass_player_apple
+        run: |
+          set -uo pipefail
+          ROOT="build/ios/iphonesimulator"
+          echo "Scanning every Mach-O binary under $ROOT"
+          # The plugin may be linked into the app binary or live in its own
+          # framework under Frameworks/, depending on use_frameworks!, so scan
+          # the whole bundle rather than guessing which file holds the symbols.
+          SYMS=$(find "$ROOT" -type f                  | while read -r f; do file "$f" | grep -q Mach-O && nm -a "$f" 2>/dev/null; done)
+          rc=0
+          for sym in _amo_register_protocol _amo_open _amo_set_credentials; do
+            if printf '%s' "$SYMS" | grep -q -- "$sym"; then
+              echo "  ok       $sym"
+            else
+              echo "  MISSING  $sym" >&2
+              rc=1
+            fi
+          done
+          exit $rc
       - name: Upload iOS app
         if: success()
         uses: actions/upload-artifact@v4
