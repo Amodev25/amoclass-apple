@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:amo_core/amo_core.dart';
 import '../core/amo_native_bridge.dart';
+import '../core/platform_ui.dart';
 import '../core/audio_output_platform.dart';
 import '../services/auth_service.dart';
 import '../services/progress_service.dart';
@@ -47,6 +48,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   Duration _duration = Duration.zero;
   double _playbackSpeed = 1.0;
   double _volume = 100.0;
+
+  // Desktop-only affordances, ported from the Windows player. A phone has the
+  // double-tap skip zones instead, and no keyboard to listen to.
+  double _zoomLevel = 1.0;
+  static const double _minZoom = 1.0;
+  static const double _maxZoom = 4.0;
+  final FocusNode _keyboardFocusNode = FocusNode();
   bool _isMuted = false;
 
   // Lock mode
@@ -111,13 +119,15 @@ class _PlayerScreenState extends State<PlayerScreen>
 
     // AntiCapture already enabled globally in main() — no redundant call here.
 
-    // Landscape mode for video playback
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    // Full-screen immersive mode
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    // Rotate into landscape and hide the system chrome for playback. A desktop
+    // window has neither, so this is skipped rather than left to be ignored.
+    if (PlatformUi.supportsOrientationLock) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    }
 
     _controlsFadeController = AnimationController(
       vsync: this,
@@ -132,6 +142,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     _initPlayer();
     _startHideTimer();
     _startHeadphoneMonitor();
+
+    // The KeyboardListener only receives events while its node holds focus,
+    // and nothing else in this screen takes focus on open.
+    if (PlatformUi.supportsPointerAndKeyboard) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _keyboardFocusNode.requestFocus();
+      });
+    }
   }
 
   // ── Headphone gate ──────────────────────────────────────────────────────────
@@ -346,14 +364,18 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _player.dispose();
     _controlsFadeController.dispose();
+    _keyboardFocusNode.dispose();
     _cleanupTempFile();
 
-    // Restore portrait and system UI
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    // Restore portrait and system UI — paired with the lock taken in initState,
+    // so it is gated on the same condition.
+    if (PlatformUi.supportsOrientationLock) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
 
     super.dispose();
   }
@@ -510,8 +532,81 @@ class _PlayerScreenState extends State<PlayerScreen>
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  // ── Zoom (desktop) ─────────────────────────────────────────────────────────
+
+  void _setZoom(double value) {
+    if (_isLocked) return;
+    setState(() => _zoomLevel = value.clamp(_minZoom, _maxZoom));
+    _showControls();
+  }
+
+  void _zoomIn() => _setZoom(_zoomLevel + 0.25);
+
+  void _zoomOut() => _setZoom(_zoomLevel - 0.25);
+
+  void _resetZoom() => _setZoom(1.0);
+
+  void _setVolume(double value) {
+    final v = value.clamp(0.0, 100.0);
+    setState(() => _volume = v);
+    _player.setVolume(_isMuted ? 0 : v);
+    _showControls();
+  }
+
+  // ── Keyboard (desktop) ─────────────────────────────────────────────────────
+
+  void _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return;
+
+    // While locked, the only key that does anything is the one that unlocks.
+    if (_isLocked) {
+      if (event.logicalKey == LogicalKeyboardKey.keyL) _toggleLock();
+      return;
+    }
+
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.space:
+        _togglePlayPause();
+      case LogicalKeyboardKey.arrowRight:
+        _skipForward();
+      case LogicalKeyboardKey.arrowLeft:
+        _skipBackward();
+      case LogicalKeyboardKey.arrowUp:
+        _setVolume(_volume + 5);
+      case LogicalKeyboardKey.arrowDown:
+        _setVolume(_volume - 5);
+      case LogicalKeyboardKey.keyM:
+        _toggleMute();
+      case LogicalKeyboardKey.keyL:
+        _toggleLock();
+      case LogicalKeyboardKey.escape:
+        Navigator.pop(context);
+      case LogicalKeyboardKey.equal:
+      case LogicalKeyboardKey.add:
+        _zoomIn();
+      case LogicalKeyboardKey.minus:
+        _zoomOut();
+      case LogicalKeyboardKey.digit0:
+        _resetZoom();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final player = _buildPlayer(context);
+
+    // A phone has no keyboard to listen to, and wrapping there would put a
+    // focus node in the tree for nothing.
+    if (!PlatformUi.supportsPointerAndKeyboard) return player;
+
+    return KeyboardListener(
+      focusNode: _keyboardFocusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: player,
+    );
+  }
+
+  Widget _buildPlayer(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -519,9 +614,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         children: [
           // Video
           Center(
-            child: Video(
-              controller: _videoController,
-              controls: (state) => const SizedBox.shrink(),
+            child: Transform.scale(
+              scale: _zoomLevel,
+              child: Video(
+                controller: _videoController,
+                controls: (state) => const SizedBox.shrink(),
+              ),
             ),
           ),
 

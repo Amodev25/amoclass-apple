@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
+import 'core/platform_ui.dart';
 import 'services/session_service.dart';
 import 'services/auth_service.dart';
 import 'services/progress_service.dart';
@@ -38,21 +39,24 @@ void main() async {
   // freshly opened file can't race a pending secure-delete).
   await DecryptionService.cleanupTempFiles();
 
-  // Set preferred orientations
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  // Orientation and system chrome are phone concepts. On macOS there is no
+  // status bar to tint and no rotation to lock, and calling these leaves the
+  // desktop window in an undefined state rather than doing nothing useful.
+  if (PlatformUi.supportsOrientationLock) {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
 
-  // Set system UI style
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: AppColors.scaffoldBg,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ),
-  );
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: AppColors.scaffoldBg,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
+  }
 
   await ProgressService.init();
 
