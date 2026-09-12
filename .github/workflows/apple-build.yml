@@ -119,3 +119,53 @@ jobs:
           path: amoclass_player_apple/build/ios/iphonesimulator/*.app
           retention-days: 7
           if-no-files-found: error
+
+  # A cloud device farm (BrowserStack, LambdaTest, AWS Device Farm) needs a
+  # device .ipa, not the simulator build, and re-signs it with its own
+  # certificate — so an unsigned archive is enough and no Apple Developer
+  # account is involved. Kept as a separate job so a packaging problem never
+  # blocks the build that proves the code compiles.
+  ipa:
+    name: Package unsigned IPA for device farms
+    needs: analyze
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        working-directory: amoclass_player_apple
+        run: flutter pub get
+
+      - name: Build for device (unsigned)
+        working-directory: amoclass_player_apple
+        run: flutter build ios --release --no-codesign
+
+      # An .ipa is just a zip with the .app inside a Payload/ directory.
+      # `flutter build ipa` would need an export options plist and a signing
+      # identity; this does not.
+      - name: Wrap the .app as an unsigned .ipa
+        working-directory: amoclass_player_apple
+        run: |
+          set -euo pipefail
+          APP=$(find build/ios/iphoneos -maxdepth 1 -name '*.app' | head -1)
+          test -n "$APP"
+          rm -rf /tmp/ipa && mkdir -p /tmp/ipa/Payload
+          cp -R "$APP" /tmp/ipa/Payload/
+          (cd /tmp/ipa && zip -qry "$OLDPWD/build/AmoPlayer-unsigned.ipa" Payload)
+          ls -lh build/AmoPlayer-unsigned.ipa
+
+      - name: Verify the native decryptor linked in
+        working-directory: amoclass_player_apple
+        run: bash ../scripts/verify_native_symbols.sh build/ios/iphoneos
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: amoclass_player_apple/build/AmoPlayer-unsigned.ipa
+          retention-days: 7
+          if-no-files-found: error
