@@ -75,6 +75,8 @@ jobs:
           ROOT: build/macos/Build/Products/Debug
         run: bash ../scripts/verify_native_symbols.sh "$ROOT"
 
+      # Uploaded BEFORE the smoke test on purpose: if the app turns out not to
+      # launch, the thing you need in order to debug that is the app itself.
       - name: Upload macOS app
         if: success()
         uses: actions/upload-artifact@v4
@@ -83,6 +85,87 @@ jobs:
           path: amoclass_player_apple/build/macos/Build/Products/Debug/*.app
           retention-days: 7
           if-no-files-found: error
+
+      # A green build proves the code compiled and linked. It does NOT prove
+      # the app starts — the iOS build was green for days while every launch
+      # died in dyld on an unsigned framework. This runner is a real Mac with a
+      # real window server, so actually run the thing and see if it survives.
+      #
+      # It cannot log in (no credentials here), so this only answers the first
+      # question: does the process stay alive, or does it die on launch?
+      - name: Smoke test — does the macOS app launch at all?
+        working-directory: amoclass_player_apple
+        run: |
+          set -uo pipefail
+
+          APP=$(find build/macos/Build/Products/Debug -maxdepth 1 -name '*.app' | head -1)
+          if [ -z "$APP" ]; then
+            echo "no .app was produced — nothing to smoke test" >&2
+            exit 1
+          fi
+
+          # Read the executable name rather than guessing it: PRODUCT_NAME is
+          # "AMO Player", so the path contains a space and the bundle name and
+          # the binary name are not required to match.
+          EXE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")
+          BIN="$APP/Contents/MacOS/$EXE"
+          echo "launching: $BIN"
+          test -x "$BIN"
+
+          # Note what crash reports already exist, so a stale one from some
+          # other process cannot be mistaken for ours.
+          REPORTS="$HOME/Library/Logs/DiagnosticReports"
+          mkdir -p "$REPORTS"
+          BEFORE=$(ls -1 "$REPORTS" 2>/dev/null | sort || true)
+
+          "$BIN" > launch.log 2>&1 &
+          PID=$!
+          sleep 25
+
+          rc=0
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "✅ still alive after 25s (pid $PID) — the app launches"
+            kill "$PID" 2>/dev/null || true
+            wait "$PID" 2>/dev/null || true
+          else
+            # Already gone. `wait` gives the real exit status.
+            set +e; wait "$PID"; code=$?; set -e
+            echo "🔴 the app exited on its own with code $code" >&2
+            rc=1
+          fi
+
+          echo "──────── app output ────────"
+          cat launch.log || true
+
+          AFTER=$(ls -1 "$REPORTS" 2>/dev/null | sort || true)
+          NEW=$(comm -13 <(printf '%s\n' "$BEFORE") <(printf '%s\n' "$AFTER") || true)
+          if [ -n "$NEW" ]; then
+            echo "──────── new crash reports ────────"
+            mkdir -p crashlogs
+            printf '%s\n' "$NEW" | while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              echo "── $f"
+              head -c 4000 "$REPORTS/$f"
+              echo
+              cp "$REPORTS/$f" crashlogs/ 2>/dev/null || true
+            done
+            rc=1
+          fi
+
+          exit "$rc"
+
+      # Copied into the workspace by the step above, because upload-artifact
+      # does not expand ~ and cannot reach outside the workspace.
+      - name: Keep the launch log when the smoke test fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-launch-failure
+          path: |
+            amoclass_player_apple/launch.log
+            amoclass_player_apple/crashlogs
+          retention-days: 7
+          if-no-files-found: ignore
 
   ios:
     name: Build iOS app
