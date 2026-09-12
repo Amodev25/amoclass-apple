@@ -1,0 +1,54 @@
+name: amo_player_apple
+description: "AMO Player for iOS & macOS - Encrypted media player"
+publish_to: 'none'
+
+version: 1.1.0+2
+
+environment:
+  sdk: ^3.10.8
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+
+  # Shared core library
+  amo_core:
+    path: ../amoclass_core
+
+  # Apple platform layer: anti-capture, focus mode, audio output and the
+  # amo:// in-process decryption channel (replaces the Android MainActivity).
+  amo_platform_apple:
+    path: ../amo_platform_apple
+
+  cupertino_icons: ^1.0.8
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  # Apple platform media backends (replace media_kit_libs_android_video)
+  media_kit_libs_ios_video: ^1.1.4
+  media_kit_libs_macos_video: ^1.1.4
+  pointycastle: ^4.0.0
+  file_picker: ^10.3.10
+  path_provider: ^2.1.5
+  crypto: ^3.0.7
+  convert: ^3.1.2
+  pdfx: ^2.9.2
+  dio: ^5.7.0
+  syncfusion_flutter_pdfviewer: ^33.1.49
+  # Keychain-backed secure storage (works on both iOS and macOS)
+  flutter_secure_storage: ^10.3.1
+  # macOS-only window control (desktop affordances ported from the Windows app)
+  window_manager: ^0.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

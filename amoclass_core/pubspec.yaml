@@ -1,0 +1,25 @@
+name: amo_core
+description: Shared core library for AMO Player (Windows & Android)
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.10.8
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  pointycastle: ^4.0.0
+  crypto: ^3.0.7
+  convert: ^3.1.2
+  path_provider: ^2.1.5
+
+# The generated localizations live here rather than in each app: the two players
+# share ~135 of ~148 strings, and one catalogue that carries a handful of
+# app-specific keys is cheaper than two that drift.
+flutter:
+  generate: true

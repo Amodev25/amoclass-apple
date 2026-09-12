@@ -1,0 +1,76 @@
+# ── Secrets — never commit ───────────────────────────────────────────────────
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
+key.properties
+
+# ── Flutter / Dart ───────────────────────────────────────────────────────────
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+
+# ── Android ──────────────────────────────────────────────────────────────────
+**/android/.gradle/
+**/android/local.properties
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+**/android/.cxx/
+*.apk
+*.aab
+
+# ── iOS / macOS ──────────────────────────────────────────────────────────────
+**/ios/Pods/
+**/macos/Pods/
+**/ios/.symlinks/
+**/macos/.symlinks/
+**/ios/Flutter/Flutter.framework/
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+**/Flutter/Generated.xcconfig
+**/Flutter/flutter_export_environment.sh
+**/xcuserdata/
+*.xcworkspace/xcuserdata/
+Podfile.lock
+.DS_Store
+
+# ── Windows ──────────────────────────────────────────────────────────────────
+**/windows/flutter/ephemeral/
+
+# ── Prebuilt Windows runtime DLLs (shipped binaries, not source) ─────────────
+apps/amoclass_player/*.dll
+
+# ── Node / Cloudflare ────────────────────────────────────────────────────────
+node_modules/
+.wrangler/
+dist/
+.output/
+
+# ── Logs and local scratch ───────────────────────────────────────────────────
+*.log
+*.zip
+diff.txt
+
+# ── Existing independent repositories — tracked separately, not here ─────────
+# amoclass_player (Windows) and amoclass_player_android each already have their
+# own .git. This repo covers only the Apple build closure: the app, its
+# platform plugin, and the shared core they all depend on by relative path.
+amoclass_player/
+amoclass_player_android/
+
+# ── Agent scratch state ──────────────────────────────────────────────────────
+.wolf/

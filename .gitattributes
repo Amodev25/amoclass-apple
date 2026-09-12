@@ -1,0 +1,13 @@
+# Normalise to LF in the repository. This matters because the macOS CI runner
+# and Xcode build scripts choke on CRLF in shell scripts and podspecs.
+* text=auto eol=lf
+
+# Binary — never touch
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.zip binary
+*.amo binary

@@ -1,0 +1,25 @@
+name: amo_platform_apple
+description: "AMO player platform channels and in-process decryption for iOS and macOS."
+version: 0.0.1
+publish_to: 'none'
+
+environment:
+  sdk: ^3.10.8
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: AmoPlatformPlugin
+        sharedDarwinSource: true
+      macos:
+        pluginClass: AmoPlatformPlugin
+        sharedDarwinSource: true

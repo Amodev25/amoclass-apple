@@ -1,0 +1,7 @@
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: amo_localizations.dart
+output-class: AmoL10n
+output-dir: lib/l10n/gen
+
+nullable-getter: false
