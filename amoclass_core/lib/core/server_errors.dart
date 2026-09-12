@@ -70,10 +70,22 @@ String localizeServerError(AmoL10n l10n, Map<String, dynamic> data) {
 /// or a teacher's instructions needs to see the same word.
 String _platformName(Object? platform) {
   switch (platform) {
+    // The worker sends the finished label ('Mac', 'iPhone'), so these cases are
+    // for the codes: a worker deployed before the label map existed sends
+    // 'macos', and an Arabic sentence reading "مسجَّل لـ macos" is not a name a
+    // student can match against an App Store listing.
     case 'windows':
+    case 'Windows':
       return 'Windows';
     case 'android':
+    case 'Android':
       return 'Android';
+    case 'ios':
+    case 'iOS':
+      return 'iPhone';
+    case 'macos':
+    case 'macOS':
+      return 'Mac';
     default:
       return platform?.toString() ?? '';
   }
