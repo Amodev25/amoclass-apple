@@ -12,6 +12,9 @@ on:
       - 'amo_platform_apple/**'
       - 'amoclass_core/**'
       - '.github/workflows/apple-build.yml'
+      # The verification step runs this script, so a change to it must rebuild
+      # — otherwise a fix to the check silently never runs.
+      - 'scripts/**'
   pull_request:
   workflow_dispatch:
 
