@@ -13,3 +13,4 @@ export 'core/server_errors.dart';
 export 'l10n/gen/amo_localizations.dart';
 export 'services/locale_service.dart';
 export 'widgets/language_toggle.dart';
+export 'widgets/lock_mark.dart';

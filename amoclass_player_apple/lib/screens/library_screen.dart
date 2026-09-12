@@ -1013,11 +1013,7 @@ class _LibraryScreenState extends State<LibraryScreen>
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: AppColors.border),
             ),
-            child: const Icon(
-              Icons.smart_display_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
+            child: const LockMark(size: 20, color: Colors.white, weight: 9.0),
           ),
           const Spacer(),
           // Focus Mode icon button
@@ -2278,7 +2274,11 @@ class _LibraryScreenState extends State<LibraryScreen>
             label: Text(AmoL10n.of(context).libraryImportFiles),
             style: ElevatedButton.styleFrom(
               backgroundColor: color,
-              foregroundColor: Colors.white,
+              // NOT always white: on the Videos tab `color` IS white, so a
+              // white foreground made the label and the + invisible — the
+              // button rendered as a blank white pill. Match the Sign In
+              // button, which is black-on-white.
+              foregroundColor: isFiles ? Colors.white : Colors.black,
               padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),

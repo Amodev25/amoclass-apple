@@ -206,11 +206,7 @@ class _SplashGateState extends State<SplashGate> {
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.smart_display_rounded,
-                  color: Colors.white,
-                  size: 44,
-                ),
+                child: const LockMark(size: 44, color: Colors.white, weight: 7.0),
               ),
               const SizedBox(height: 24),
               const Text(

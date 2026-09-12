@@ -241,11 +241,7 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.smart_display_rounded,
-                      color: Colors.white,
-                      size: 36,
-                    ),
+                    child: const LockMark(size: 36, color: Colors.white, weight: 7.4),
                   ),
                 ),
               ],
