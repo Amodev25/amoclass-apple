@@ -19,7 +19,6 @@ if [ ! -d "$ROOT" ]; then
   exit 1
 fi
 
-echo "── Mach-O binaries under $ROOT ──"
 # The plugin lands either in the app binary or in its own framework depending
 # on how CocoaPods linked it, so look at every binary in the bundle.
 MACHO=$(find "$ROOT" -type f -exec sh -c 'file -b "$1" | grep -q Mach-O && echo "$1"' _ {} \;)
@@ -29,19 +28,30 @@ if [ -z "$MACHO" ]; then
   find "$ROOT" -maxdepth 4 | head -40 >&2
   exit 1
 fi
-printf '%s\n' "$MACHO" | sed 's|^|  |'
 
-# Dump every symbol once; searching a variable beats re-running nm per symbol.
-SYMS=$(printf '%s\n' "$MACHO" | while IFS= read -r f; do nm -a "$f" 2>/dev/null; done)
+echo "── binaries scanned: $(printf '%s\n' "$MACHO" | wc -l | tr -d ' ') ──"
 
-echo "── symbols containing 'amo' ──"
-printf '%s\n' "$SYMS" | grep -i 'amo' | sort -u | head -30 | sed 's|^|  |'
+# -gU is deliberate: global (exported) symbols that this binary DEFINES.
+# Plain `nm -a` also emits debug stabs naming every source path, and since every
+# path here contains "amoclass" that buries the real symbols in noise.
+DEFINED=$(printf '%s\n' "$MACHO" | while IFS= read -r f; do
+  nm -gU "$f" 2>/dev/null | sed "s|^|$(basename "$f") |"
+done)
+
+echo "── defined symbols starting with _amo ──"
+FOUND=$(printf '%s\n' "$DEFINED" | grep -E ' _amo[a-z_]*$' | sort -u)
+if [ -n "$FOUND" ]; then
+  printf '%s\n' "$FOUND" | sed 's|^|  |'
+else
+  echo "  (none)"
+fi
 
 echo "── required symbols ──"
 rc=0
 for sym in $REQUIRED_SYMBOLS; do
-  if printf '%s\n' "$SYMS" | grep -q -- "$sym"; then
-    echo "  ok       $sym"
+  owner=$(printf '%s\n' "$DEFINED" | grep -E " ${sym}\$" | awk '{print $1}' | head -1)
+  if [ -n "$owner" ]; then
+    echo "  ok       $sym  (in $owner)"
   else
     echo "  MISSING  $sym" >&2
     rc=1
@@ -51,7 +61,8 @@ done
 if [ "$rc" -ne 0 ]; then
   echo >&2
   echo "The C decryptor did not make it into the binary. Check that" >&2
-  echo "amo_platform_apple.podspec still matches Classes/**/*.{h,m,c}." >&2
+  echo "amo_platform_apple.podspec still matches Classes/**/*.{h,m,c}, and that" >&2
+  echo "the symbols are not being hidden by -fvisibility=hidden." >&2
 fi
 
 exit "$rc"
