@@ -1,0 +1,122 @@
+name: Apple build
+
+# The point of this workflow is the macOS runner: it is the only place in the
+# project where an iOS or macOS build can actually happen. Everything is
+# unsigned, so it needs no Apple Developer account and no secrets.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'amoclass_player_apple/**'
+      - 'amo_platform_apple/**'
+      - 'amoclass_core/**'
+      - '.github/workflows/apple-build.yml'
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.38.9'
+
+jobs:
+  # Cheap gate: analyse and unit-test on Linux before paying for a macOS
+  # runner, which bills at ten times the rate.
+  analyze:
+    name: Analyze and unit test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: amoclass_player_apple
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: amoclass_player_apple
+        run: flutter analyze
+
+      - name: Unit tests
+        working-directory: amoclass_player_apple
+        run: flutter test
+
+  macos:
+    name: Build macOS app
+    needs: analyze
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: amoclass_player_apple
+        run: flutter pub get
+
+      # Unsigned: proves the Objective-C plugin and the C decryptor compile and
+      # link. Signing needs a paid account and is deliberately not done here.
+      - name: Build macOS (unsigned, debug)
+        working-directory: amoclass_player_apple
+        run: flutter build macos --debug
+
+      - name: Upload macOS app
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-debug-app
+          path: amoclass_player_apple/build/macos/Build/Products/Debug/*.app
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Dump Xcode logs on failure
+        if: failure()
+        run: |
+          echo "── CocoaPods ──"
+          cat amoclass_player_apple/macos/Podfile.lock 2>/dev/null || echo "no Podfile.lock"
+          echo "── Pod install log ──"
+          ls -la ~/Library/Logs/CoreSimulator 2>/dev/null || true
+
+  ios:
+    name: Build iOS app
+    needs: analyze
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: amoclass_player_apple
+        run: flutter pub get
+
+      # --no-codesign is what makes this free: it builds a real iOS binary
+      # without any certificate, provisioning profile or Apple account.
+      - name: Build iOS (unsigned, simulator)
+        working-directory: amoclass_player_apple
+        run: flutter build ios --debug --simulator --no-codesign
+
+      - name: Upload iOS app
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-app
+          path: amoclass_player_apple/build/ios/iphonesimulator/*.app
+          retention-days: 7
+          if-no-files-found: warn
