@@ -7,6 +7,7 @@ import 'library_service.dart';
 import '../core/decryption_service.dart';
 import '../core/amo_native_bridge.dart';
 import '../core/platform_identity.dart';
+import 'course_files_service.dart';
 
 /// Represents one course session a student belongs to.
 class CourseSession {
@@ -225,6 +226,10 @@ class AuthService {
         _setActiveCourse(_courses.first);
         // Create signed session file for offline tracking (new format — all courses)
         await SessionService.createSession(_courses, serverCode.trim());
+        await CourseFilesService.rememberLoginCode(
+          serverCode.trim(),
+          _courses.map((c) => c.serverCode ?? serverCode.trim()),
+        );
         return null; // success
       } else {
         return LoginFailure(
@@ -304,6 +309,10 @@ class AuthService {
 
         // Merge into session file
         await SessionService.addCoursesToSession(newCourses, serverCode.trim());
+        await CourseFilesService.rememberLoginCode(
+          serverCode.trim(),
+          newCourses.map((c) => c.serverCode ?? serverCode.trim()),
+        );
         return null; // success
       } else {
         return LoginFailure(

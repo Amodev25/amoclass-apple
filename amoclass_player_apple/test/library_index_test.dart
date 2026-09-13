@@ -165,6 +165,25 @@ void main() {
       expect(stray.existsSync(), isTrue);
     });
 
+    test('a login code finds its course after sign-out, until deleted', () async {
+      await CourseFilesService.rememberLoginCode('ABC123', ['SRV000000001']);
+      await CourseFilesService.rememberLoginCode('ABC123', ['SRV000000002']);
+      expect(await CourseFilesService.serverCodesForLogin('ABC123'), [
+        'SRV000000001',
+        'SRV000000002',
+      ]);
+      // Unknown short code: nothing to offer. A full server code stands alone.
+      expect(await CourseFilesService.serverCodesForLogin('ZZZ999'), isEmpty);
+      expect(await CourseFilesService.serverCodesForLogin('SRV000000009'), [
+        'SRV000000009',
+      ]);
+
+      await CourseFilesService.delete('SRV000000001', const []);
+      expect(await CourseFilesService.serverCodesForLogin('ABC123'), [
+        'SRV000000002',
+      ]);
+    });
+
     test('a code that is not a plain code touches nothing', () async {
       final outside = await put('courses/keep.amo', 10);
       for (final code in ['..', '../courses', 'C1/..', '']) {

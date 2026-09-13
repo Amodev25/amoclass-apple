@@ -6,6 +6,7 @@ import '../core/decryption_service.dart';
 import '../core/amo_native_bridge.dart';
 import 'library_screen.dart';
 import 'package:amo_core/amo_core.dart';
+import '../widgets/course_files_prompt.dart';
 
 /// Password-only re-verification screen for Android.
 ///
@@ -116,10 +117,18 @@ class _ReVerifyScreenState extends State<ReVerifyScreen>
         ),
       );
     } else {
+      final message = error.message;
       setState(() {
         _isLoading = false;
-        _error = error;
+        _error = message;
       });
+      if (courseAccessEndedCodes.contains(error.code)) {
+        await CourseFilesPrompt.offer(
+          context,
+          serverCodes: [_selectedCourse!.serverCode],
+          message: message,
+        );
+      }
     }
   }
 

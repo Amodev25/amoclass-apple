@@ -13,6 +13,7 @@ import 'course_files_service.dart';
 import 'auth_service.dart';
 import '../screens/login_screen.dart';
 import '../core/platform_identity.dart';
+import '../widgets/course_files_prompt.dart';
 
 /// Result of a session check.
 enum SessionResult {
@@ -890,7 +891,7 @@ class SessionService {
   }
 
   /// Re-verify a specific course using server code + password.
-  static Future<String?> reVerifyCourse(
+  static Future<LoginFailure?> reVerifyCourse(
     StoredCourse course,
     String password,
   ) async {
@@ -933,12 +934,17 @@ class SessionService {
         _lastVerifyResult = true;
         return null;
       } else {
-        return localizeServerError(LocaleService.instance.strings, data);
+        return LoginFailure(
+          localizeServerError(LocaleService.instance.strings, data),
+          data['code'] as String?,
+        );
       }
     } on SocketException {
-      return LocaleService.instance.strings.errCannotConnectDialog;
+      return LoginFailure(LocaleService.instance.strings.errCannotConnectDialog);
     } catch (e) {
-      return LocaleService.instance.strings.errConnectionFailed('$e');
+      return LoginFailure(
+        LocaleService.instance.strings.errConnectionFailed('$e'),
+      );
     } finally {
       client.close(force: true);
     }
@@ -1053,106 +1059,23 @@ class SessionService {
                 ),
                 if (offerDelete) ...[
                   const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.04),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.sd_storage_outlined,
-                              size: 18,
-                              color: Colors.white.withValues(alpha: 0.7),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                AmoL10n.of(context).courseFilesOnDeviceLabel,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              sizeLabel,
-                              textDirection: TextDirection.ltr,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          AmoL10n.of(context).courseFilesOnDeviceBody,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.55),
-                            fontSize: 12,
-                            height: 1.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  CourseFilesSizeBox(sizeLabel: sizeLabel),
                 ],
               ],
             ),
             actions: [
               if (offerDelete) ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: deleting
-                        ? null
-                        : () async {
-                            setDialogState(() => deleting = true);
-                            await CourseFilesService.delete(code!, leftovers);
-                            if (!ctx.mounted) return;
-                            leave(ctx);
-                          },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.error,
-                      side: BorderSide(
-                        color: AppColors.error.withValues(alpha: 0.5),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: deleting
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.error,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Text(AmoL10n.of(context).courseFilesDeleting),
-                            ],
-                          )
-                        : Text(
-                            AmoL10n.of(context).courseFilesDelete(sizeLabel),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
-                          ),
-                  ),
+                CourseFilesDeleteButton(
+                  sizeLabel: sizeLabel,
+                  deleting: deleting,
+                  onPressed: deleting
+                      ? null
+                      : () async {
+                          setDialogState(() => deleting = true);
+                          await CourseFilesService.delete(code!, leftovers);
+                          if (!ctx.mounted) return;
+                          leave(ctx);
+                        },
                 ),
                 const SizedBox(height: 8),
               ],

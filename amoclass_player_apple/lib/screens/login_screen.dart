@@ -4,6 +4,8 @@ import '../services/auth_service.dart';
 import '../services/session_service.dart';
 import 'course_select_screen.dart';
 import 'package:amo_core/amo_core.dart';
+import '../services/course_files_service.dart';
+import '../widgets/course_files_prompt.dart';
 
 class LoginScreen extends StatefulWidget {
   final bool isAddingCourse;
@@ -149,6 +151,20 @@ class _LoginScreenState extends State<LoginScreen>
         _isLoading = false;
         _error = message;
       });
+
+      // Access to this course has ended. If the student kept its files when
+      // they were signed out, this is where they can still let them go.
+      if (courseAccessEndedCodes.contains(failure.code)) {
+        final serverCodes = await CourseFilesService.serverCodesForLogin(
+          _serverCodeController.text.trim(),
+        );
+        if (!mounted) return;
+        await CourseFilesPrompt.offer(
+          context,
+          serverCodes: serverCodes,
+          message: message,
+        );
+      }
     }
   }
 
