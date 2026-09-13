@@ -159,6 +159,7 @@ class _LibraryScreenState extends State<LibraryScreen>
         SessionService.showForceLogout(
           context,
           check.blockedReason ?? 'invalid',
+          serverCode: check.blockedServerCode,
         );
         break;
     }

@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
+import 'course_files_service.dart';
 import 'auth_service.dart';
 import '../screens/login_screen.dart';
 import '../core/platform_identity.dart';
@@ -33,11 +34,16 @@ enum SessionResult {
 class SessionCheckResult {
   final SessionResult result;
   final String? blockedReason;
+
+  /// The course [blockedReason] is about. A student can hold several courses
+  /// and the check walks all of them, so it is not always the one open.
+  final String? blockedServerCode;
   final List<StoredCourse> storedCourses;
 
   const SessionCheckResult({
     required this.result,
     this.blockedReason,
+    this.blockedServerCode,
     this.storedCourses = const [],
   });
 }
@@ -462,6 +468,7 @@ class SessionService {
         return SessionCheckResult(
           result: SessionResult.blocked,
           blockedReason: reason,
+          blockedServerCode: stored.serverCode,
           storedCourses: courses,
         );
       }
@@ -868,6 +875,7 @@ class SessionService {
         return SessionCheckResult(
           result: SessionResult.blocked,
           blockedReason: reason,
+          blockedServerCode: course.serverCode,
           storedCourses: courses,
         );
       }
@@ -963,76 +971,218 @@ class SessionService {
   }
 
   /// Show force-logout dialog and navigate to login screen.
-  static void showForceLogout(BuildContext context, String reason) {
+  ///
+  /// When access to a course has ended, the dialog also says how much space
+  /// that course's files take on this device and offers to delete them. It
+  /// only offers: the teacher may extend the course, and then the files would
+  /// have to be downloaded again, so the student decides.
+  ///
+  /// [serverCode] names the course the verdict is about; it defaults to the
+  /// course currently open.
+  static Future<void> showForceLogout(
+    BuildContext context,
+    String reason, {
+    String? serverCode,
+  }) async {
     final message = getErrorMessage(reason);
+    final code = serverCode ?? AuthService.loggedInServerCode;
+
+    var leftovers = const <File>[];
+    var leftoverBytes = 0;
+    if (reason == 'course_expired' && code != null) {
+      try {
+        leftovers = await CourseFilesService.filesFor(code);
+        leftoverBytes = await CourseFilesService.totalBytes(leftovers);
+      } catch (_) {}
+    }
+    if (!context.mounted) return;
+
+    final offerDelete = leftoverBytes > 0;
+    final sizeLabel = CourseFilesService.formatBytes(leftoverBytes);
+    var deleting = false;
+
+    void leave(BuildContext dialogContext) {
+      AuthService.logout();
+      clearSession();
+      Navigator.of(dialogContext).pop();
+      if (!context.mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => PopScope(
         canPop: false,
-        child: AlertDialog(
-          backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: AppColors.border),
-          ),
-          icon: Icon(
-            reason == 'offline_limit' ? Icons.wifi_off : Icons.block,
-            color: AppColors.error,
-            size: 48,
-          ),
-          title: Text(
-            reason == 'offline_limit'
-                ? AmoL10n.of(context).errInternetRequiredTitle
-                : AmoL10n.of(context).errAccessDeniedTitle,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
+        child: StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: AppColors.border),
             ),
-          ),
-          content: Text(
-            message,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontSize: 14,
-              height: 1.5,
+            icon: Icon(
+              reason == 'offline_limit' ? Icons.wifi_off : Icons.block,
+              color: AppColors.error,
+              size: 48,
             ),
-          ),
-          actions: [
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  AuthService.logout();
-                  clearSession();
-                  Navigator.of(ctx).pop();
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    (route) => false,
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+            title: Text(
+              reason == 'offline_limit'
+                  ? AmoL10n.of(context).errInternetRequiredTitle
+                  : AmoL10n.of(context).errAccessDeniedTitle,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 14,
+                    height: 1.5,
                   ),
                 ),
-                child: Text(
-                  reason == 'offline_limit'
-                      ? AmoL10n.of(context).actionOk
-                      : AmoL10n.of(context).actionGoToLogin,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
+                if (offerDelete) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.sd_storage_outlined,
+                              size: 18,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                AmoL10n.of(context).courseFilesOnDeviceLabel,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              sizeLabel,
+                              textDirection: TextDirection.ltr,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          AmoL10n.of(context).courseFilesOnDeviceBody,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.55),
+                            fontSize: 12,
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              if (offerDelete) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: deleting
+                        ? null
+                        : () async {
+                            setDialogState(() => deleting = true);
+                            await CourseFilesService.delete(code!, leftovers);
+                            if (!ctx.mounted) return;
+                            leave(ctx);
+                          },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      side: BorderSide(
+                        color: AppColors.error.withValues(alpha: 0.5),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: deleting
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.error,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(AmoL10n.of(context).courseFilesDeleting),
+                            ],
+                          )
+                        : Text(
+                            AmoL10n.of(context).courseFilesDelete(sizeLabel),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: deleting ? null : () => leave(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: Text(
+                    offerDelete
+                        ? AmoL10n.of(context).courseFilesKeep
+                        : reason == 'offline_limit'
+                        ? AmoL10n.of(context).actionOk
+                        : AmoL10n.of(context).actionGoToLogin,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

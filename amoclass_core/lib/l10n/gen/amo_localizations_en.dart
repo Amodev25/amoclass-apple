@@ -610,6 +610,24 @@ class AmoL10nEn extends AmoL10n {
       'Your course access has expired.\nPlease contact your teacher.';
 
   @override
+  String get courseFilesOnDeviceLabel => 'This course\'s files on your device';
+
+  @override
+  String get courseFilesOnDeviceBody =>
+      'They won\'t play unless your access is renewed. If you delete them and it\'s renewed later, you\'ll need to download them again.';
+
+  @override
+  String courseFilesDelete(String size) {
+    return 'Delete files ($size)';
+  }
+
+  @override
+  String get courseFilesDeleting => 'Deleting…';
+
+  @override
+  String get courseFilesKeep => 'Keep them';
+
+  @override
   String get errConnectToVerify =>
       'Please connect to the internet to verify your account.';
 

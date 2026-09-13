@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:amo_player_apple/services/library_service.dart';
+import 'package:amo_player_apple/services/course_files_service.dart';
 
 /// Points path_provider at a throwaway directory, so LibraryService writes its
 /// index where the test can look at it.
@@ -20,6 +21,9 @@ class _FakePaths extends PathProviderPlatform with MockPlatformInterfaceMixin {
 
   @override
   Future<String?> getTemporaryPath() async => '$root/tmp';
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => '$root/docs';
 }
 
 Uint8List _bytes(int n) => Uint8List.fromList(List.filled(4, n));
@@ -133,6 +137,42 @@ void main() {
         await outside.parent.delete(recursive: true);
       },
     );
+  });
+
+  group('course files', () {
+    Future<File> put(String path, int bytes) async {
+      final file = File('${root.path}/$path');
+      await file.create(recursive: true);
+      await file.writeAsBytes(List.filled(bytes, 7));
+      return file;
+    }
+
+    test('finds and deletes one course, leaves the others', () async {
+      await put('courses/C1/Videos/a.amo', 100);
+      await put('courses/C1/Thumbnails/x.v.thumb', 20);
+      await put('courses/C1/amo_library.json', 5);
+      final other = await put('courses/C2/Videos/b.amo', 50);
+      // Not a container, so its header names no course.
+      final stray = await put('docs/AmoOnlineFiles/notes.amo', 30);
+
+      final files = await CourseFilesService.filesFor('C1');
+      expect(files, hasLength(3));
+      expect(await CourseFilesService.totalBytes(files), 125);
+
+      await CourseFilesService.delete('C1', files);
+      expect(Directory('${root.path}/courses/C1').existsSync(), isFalse);
+      expect(other.existsSync(), isTrue);
+      expect(stray.existsSync(), isTrue);
+    });
+
+    test('a code that is not a plain code touches nothing', () async {
+      final outside = await put('courses/keep.amo', 10);
+      for (final code in ['..', '../courses', 'C1/..', '']) {
+        expect(await CourseFilesService.filesFor(code), isEmpty);
+        await CourseFilesService.delete(code, [outside]);
+      }
+      expect(outside.existsSync(), isTrue);
+    });
   });
 
   group('thumbnail store', () {

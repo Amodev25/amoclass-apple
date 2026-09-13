@@ -622,6 +622,24 @@ class AmoL10nAr extends AmoL10n {
       'انتهت صلاحيتك في هذا الكورس.\nتواصل مع معلّمك.';
 
   @override
+  String get courseFilesOnDeviceLabel => 'ملفات هذا الكورس على جهازك';
+
+  @override
+  String get courseFilesOnDeviceBody =>
+      'لن تعمل إلا إذا تجدّد وصولك. إذا حذفتها ثم تجدّد لاحقاً، ستحتاج إلى تحميلها من جديد.';
+
+  @override
+  String courseFilesDelete(String size) {
+    return 'احذف الملفات ($size)';
+  }
+
+  @override
+  String get courseFilesDeleting => 'جارٍ الحذف…';
+
+  @override
+  String get courseFilesKeep => 'احتفظ بها';
+
+  @override
   String get errConnectToVerify => 'اتصل بالإنترنت للتحقق من حسابك.';
 
   @override

@@ -113,6 +113,7 @@ class _CourseSelectScreenState extends State<CourseSelectScreen>
         SessionService.showForceLogout(
           context,
           check.blockedReason ?? 'invalid',
+          serverCode: check.blockedServerCode,
         );
         break;
     }

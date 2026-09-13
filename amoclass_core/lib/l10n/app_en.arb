@@ -375,6 +375,18 @@
   "errSessionExpiredLogin": "Session expired. Please log in again.",
   "errPlatformLocked": "This account is locked to another platform. Contact your teacher to switch platforms.",
   "errCourseAccessExpired": "Your course access has expired.\nPlease contact your teacher.",
+  "courseFilesOnDeviceLabel": "This course's files on your device",
+  "courseFilesOnDeviceBody": "They won't play unless your access is renewed. If you delete them and it's renewed later, you'll need to download them again.",
+  "courseFilesDelete": "Delete files ({size})",
+  "@courseFilesDelete": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "courseFilesDeleting": "Deleting…",
+  "courseFilesKeep": "Keep them",
   "errConnectToVerify": "Please connect to the internet to verify your account.",
   "errSessionExpired": "Your session has expired.\nPlease log in again.",
   "errSessionInvalid": "Your session is no longer valid.\nPlease log in again.",

@@ -1045,6 +1045,36 @@ abstract class AmoL10n {
   /// **'Your course access has expired.\nPlease contact your teacher.'**
   String get errCourseAccessExpired;
 
+  /// No description provided for @courseFilesOnDeviceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'This course\'s files on your device'**
+  String get courseFilesOnDeviceLabel;
+
+  /// No description provided for @courseFilesOnDeviceBody.
+  ///
+  /// In en, this message translates to:
+  /// **'They won\'t play unless your access is renewed. If you delete them and it\'s renewed later, you\'ll need to download them again.'**
+  String get courseFilesOnDeviceBody;
+
+  /// No description provided for @courseFilesDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete files ({size})'**
+  String courseFilesDelete(String size);
+
+  /// No description provided for @courseFilesDeleting.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting…'**
+  String get courseFilesDeleting;
+
+  /// No description provided for @courseFilesKeep.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep them'**
+  String get courseFilesKeep;
+
   /// No description provided for @errConnectToVerify.
   ///
   /// In en, this message translates to:
