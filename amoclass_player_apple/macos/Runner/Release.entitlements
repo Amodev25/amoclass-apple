@@ -3,22 +3,19 @@
 <plist version="1.0">
 <dict>
 	<!--
-	  The App Sandbox is deliberately OFF.
+	  The App Sandbox is OFF.
 
-	  Focus Mode depends on NSApplicationPresentationDisableProcessSwitching,
-	  and the sandbox blocks exactly that option: a sandboxed build still hides
-	  the Dock and menu bar, so the lock LOOKS applied while Cmd+Tab keeps
-	  working. A lock that silently half-works is worse than one that reports
-	  failure, and Focus Mode is the point of this app.
+	  It was turned off for Focus Mode, whose kiosk presentation options the
+	  sandbox blocks. The owner removed Focus Mode on 2026-09-14, so that reason
+	  no longer exists; the key has not been flipped back yet because nothing
+	  has been tested sandboxed. Turning it on needs, at least,
+	  com.apple.security.files.user-selected.read-only for the import picker,
+	  and a check of everything else the app does (keychain, IOKit device id,
+	  mpv). It is also what the Mac App Store requires. macOS currently ships as a Developer ID signed, notarised
+	  DMG straight from the site.
 
-	  The cost is the Mac App Store, which requires the sandbox. That is
-	  already the plan: macOS ships as a Developer ID signed, notarised DMG
-	  straight from the site, the same way the Windows build and the Android
-	  APK are distributed. Turning the sandbox back on means dropping Focus
-	  Mode on macOS, not just flipping this key.
-
-	  With no sandbox there is also no need for files.user-selected entitlements
-	  — reading the student's .amo files is unrestricted.
+	  With no sandbox there is no need for files.user-selected entitlements
+	  — reading the student's lesson files is unrestricted.
 	-->
 	<key>com.apple.security.app-sandbox</key>
 	<false/>

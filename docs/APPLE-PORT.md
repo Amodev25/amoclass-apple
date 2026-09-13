@@ -1,6 +1,6 @@
 # بناء بيئة آبل (iOS + macOS) — دليل ما حدث بالتفصيل
 
-> آخر تحديث: 2026-09-12
+> آخر تحديث: 2026-09-13 (تحديث أمني — القسم ١١)
 > الحالة: **iOS مثبت عمليًا** (تسجيل دخول + فيديو مشفّر شغال على Appetize).
 > **macOS يُقلع بنجاح على رنر آبل حقيقي، لكن لم يُسجَّل دخول ولم تُختبر الحماية عليه.**
 
@@ -64,7 +64,6 @@ flutter:
 | الملف | أسطر متغيرة | السبب |
 |---|---|---|
 | `screens/player_screen.dart` | 130 | زووم + اختصارات كيبورد للماك، وتقييد قفل الاتجاه بالموبايل |
-| `core/focus_mode_platform.dart` | 71 | وضع التركيز على الماك، معطّل تمامًا على iOS |
 | `core/anti_capture.dart` | 34 | `NSWindowSharingNone` للماك، درع كشف للآيفون |
 | `main.dart` | 34 | قفل الاتجاه لا يُستدعى على سطح المكتب |
 | `services/session_service.dart` | 8 | الإبلاغ عن المنصة الحقيقية |
@@ -118,7 +117,7 @@ static String get current => Platform.isMacOS ? macos : ios;
 لذلك `scripts/verify_native_symbols.sh` يفحص **كل** ملف Mach-O داخل الحزمة ويطالب بوجود ثلاثة رموز مُعرَّفة:
 
 ```
-_amo_register_protocol   _amo_open   _amo_set_credentials
+_amo_register_protocol   _amo_open   _amo_set_content_key
 ```
 
 ويميّز بين حالتين مختلفتين تمامًا:
@@ -249,8 +248,8 @@ dyld: Library not loaded: @rpath/Ass.framework/Ass
 | القرار | السبب |
 |---|---|
 | `AntiCapture.isSupported()` ترجع **false على iOS** | iOS **لا يملك** مقابلًا لـ FLAG_SECURE. المتاح هو الكشف عبر `UIScreen.isCaptured` ثم تغطية النافذة. هذا تخفيف لا منع، والواجهة يجب ألا تَعِد الطالب بما لا تستطيع. |
-| وضع التركيز **معطّل كليًا على iOS** | لا يوجد مقابل لـ lock task. كل استدعاء محروس بـ `if (!isSupported) return;`. |
-| `app-sandbox = false` على macOS | صندوق الرمل يمنع `DisableProcessSwitching`، وبدونه لا وجود لوضع التركيز. **الثمن: التطبيق لا يمكن نشره في Mac App Store.** خطة التوزيع هي DMG. |
+| **لا يوجد وضع تركيز** على iOS ولا macOS | أزاله المالك بالكامل في 2026-09-14: لا قفل داخل التطبيق، لا كتم للإشعارات، لا Guided Access، لا خيارات kiosk على الماك، لا استراحة طوارئ ولا مؤقت جلسة. لا تُعِده. |
+| `app-sandbox = false` على macOS | أُطفئ أصلًا من أجل وضع التركيز، وهذا السبب لم يعد قائمًا بعد إزالته. لم يُعَد تشغيله لأن التطبيق لم يُختبر داخل صندوق الرمل (يحتاج على الأقل `files.user-selected.read-only` لمنتقي الملفات). **الثمن الحالي: لا Mac App Store.** خطة التوزيع هي DMG. |
 | **لا روابط شراء أو تسجيل داخل التطبيق** | يحافظ على تصنيف "Reader App" لدى آبل ← بلا مشتريات داخلية وبلا عمولة ٣٠٪. إضافة رابط شراء واحد تُسقط هذا التصنيف. |
 | `ios` و `macos` قيمتان منفصلتان لا `apple` واحدة | مقعد مقيَّد بـ "آبل" يسمح للطالب بالمشاهدة على الآيفون **وعلى** الماك بترخيص واحد. |
 | لا `CFBundleDocumentTypes` ولا `UTExportedTypeDeclarations` في `Info.plist` | الحاوية تُعرَّف ببصمة البايتات (`AMOENC01`) لا باسمها، والمدرّس يختار الامتداد بحرية. و iOS يوجّه الملفات للتطبيقات بالامتداد/UTI، فأي إعلان هنا سيغطي امتدادًا واحدًا فقط ويجعل "افتح بـ Lockclass" تظهر ثم تفشل مع باقي الملفات. الاستيراد يمر بمنتقي الملفات داخل التطبيق (`FileType.any`) وهو بلا هذا القيد. |
@@ -294,7 +293,6 @@ flutter: media_kit: NativeReferenceHolder: Allocated 36652265472
 
 - تشغيل درس مشفّر
 - `NSWindowSharingNone` (منع التصوير)
-- وضع التركيز
 - اختصارات الكيبورد والزووم
 
 وقيد إضافي: رنر GitHub معماريته **arm64**، فنسخة debug تُبنى للمعمارية المضيفة وحدها. أي أن ما ثبت هو **Apple Silicon**، أما أجهزة Intel فلم تُختبر.
@@ -353,3 +351,40 @@ cd apps && git add -A && git commit -m "..." && git push origin main
 `amoclass_core/lib/core/constants.dart` يحتوي **مفتاح التشفير الرئيسي** على هيئة أربع مصفوفات بايت مقنّعة بـ XOR.
 
 مستودع `Amodev25/amoclass-apple` **يجب أن يبقى خاصًا (Private)**. إن صار عامًا ولو للحظة واحدة، يُعامل المفتاح على أنه **مسرَّب**، وتجب إعادة تشفير كل المحتوى.
+
+---
+
+## ١١. تحديث أمني — 2026-09-13
+
+مطابق لـ `docs/SECURITY-FIX-CONTRACT.md` §1 و§3. لم يُبنَ ولم يُشغَّل محليًا (لا ماك)؛ الـ CI هو أول مُترجِم لكود Objective-C.
+
+**مفتاح المحتوى**
+- التطبيق لم يعد يستلم `credential` ولا `courseSecret`. الخادم يرسل `contentKey` (64 خانة hex) و`accessEndsAt` لكل كورس، ويُخزَّنان بدلهما.
+- القناة `com.lockclass/amo_stream`: ‏`setContentKey {contentKey}` تُرجع `bool`، و`clearContentKey`. التطبيق يتحقق من النتيجة قبل كل تشغيل.
+- `amo_stream_apple.c/.h`: ‏`amo_apple_set_content_key` و`amo_apple_clear_content_key`. فحص الرموز يطالب بـ `_amo_set_content_key`.
+- 401 / ‏`SESSION_INVALID` يرسل الكورس لشاشة إعادة التحقق، لا يُعدّ "بلا إنترنت". و426 يعرض نافذة التحديث.
+- سياسة عدم الاتصال: ٣ فتحات (قرار المالك)، مع فحص `accessEndsAt` وكشف إرجاع الساعة عبر `lastSeenAt`. لا توجد قاعدة أيام.
+
+**مكان التخزين**
+- كل ما يخص الكورسات صار في Application Support: ‏`courses/<serverCode>/` (ومعه `amo_catalog.json`)، والتنزيلات في `AmoOnlineFiles/<courseId>/`.
+- المجلدان مستثنيان من النسخ الاحتياطي عبر `excludeFromBackup` (‏`NSURLIsExcludedFromBackupKey`).
+- `UIFileSharingEnabled` و`LSSupportsOpeningDocumentsInPlace` = ‏false. ما تركته النسخ السابقة في Documents على iOS يُحذف عند الإقلاع.
+- ملفات PDF تُفك في الذاكرة فقط، مع تعطيل تحديد النص والروابط.
+
+**Privacy manifest**
+- `ios/Runner/PrivacyInfo.xcprivacy` و`macos/Runner/PrivacyInfo.xcprivacy` (مضافان لمرحلة Resources)، وملف ثالث للإضافة عبر `resource_bundles`.
+- لا تتبّع. البيانات المجمّعة: Device ID وName وUser ID وProduct Interaction، لوظيفة التطبيق فقط.
+- الواجهات ذات السبب: DiskSpace ‏`E174.1` وFileTimestamp ‏`C617.1`.
+- `ITSAppUsesNonExemptEncryption` = ‏false مع تعليق بأساس الإعفاء. **يجب أن يؤكده المالك.**
+
+**Keychain**
+- معرّف الجهاز: `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`، مع فحص نتيجة `SecItemAdd`. على macOS يُخزَّن SHA-256 مملّح لـ IOPlatformUUID بدل القيمة الخام. الحساب الجديد `device_id.v2`، فأجهزة الاختبار ستُربط بمقعد جديد مرة واحدة.
+- `flutter_secure_storage`: ‏`first_unlock_this_device` على iOS، و`usesDataProtectionKeychain: false` على macOS.
+- لا يُرسل `'unknown'` أبدًا: عند فشل المعرّف الأصلي يُولَّد UUID v4 ويُحفظ.
+
+**أخرى**
+- iPhone فقط (`TARGETED_DEVICE_FAMILY = 1`).
+- شاشة الإقلاع بلون `#0B0E1A`.
+- اسم القائمة على macOS صار Lockclass.
+- (2026-09-14) أُزيل وضع التركيز بالكامل بقرار المالك، ومعه اعتماد `window_manager` وقناة `com.lockclass/focus_mode`.
+- شارة "تسجيل الشاشة ممنوع" لا تظهر إلا إذا كانت الحماية مفعّلة فعلًا.

@@ -163,10 +163,26 @@ static int64_t pattern_encrypted_bytes(int64_t length) {
            (rest < AMO_PATTERN_UNIT ? rest : AMO_PATTERN_UNIT);
 }
 
-/* ── Global credential storage (set from JNI before playback) ──────────── */
-static char g_credential[512]    = {0};
-static char g_course_secret[512] = {0};
-static int  g_has_credentials    = 0;
+/* ── Course content key (set from the platform bridge before playback) ─────
+   The server sends the 32-byte key itself, hex-encoded. The two values it is
+   derived from (the teacher's credential and the course secret) never reach a
+   student any more: the credential is shared by every course a teacher owns,
+   so a student holding it could derive the key of courses they never joined.
+
+   Written from the platform thread, read from mpv's stream thread in amo_open,
+   hence the lock. */
+#ifdef _WIN32
+static SRWLOCK g_key_lock = SRWLOCK_INIT;
+#define KEY_LOCK()   AcquireSRWLockExclusive(&g_key_lock)
+#define KEY_UNLOCK() ReleaseSRWLockExclusive(&g_key_lock)
+#else
+#include <pthread.h>
+static pthread_mutex_t g_key_lock = PTHREAD_MUTEX_INITIALIZER;
+#define KEY_LOCK()   pthread_mutex_lock(&g_key_lock)
+#define KEY_UNLOCK() pthread_mutex_unlock(&g_key_lock)
+#endif
+static uint8_t g_content_key[AMO_KEY_SIZE] = {0};
+static int     g_has_content_key           = 0;
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -189,12 +205,14 @@ static void derive_master_key(uint8_t out[AMO_KEY_SIZE]) {
     }
 }
 
-static int derive_v2_key(uint8_t out[AMO_KEY_SIZE]) {
-    if (!g_has_credentials) return 0;
-    hmac_sha256((const uint8_t *)g_credential, strlen(g_credential),
-                (const uint8_t *)g_course_secret, strlen(g_course_secret),
-                out);
-    return 1;
+/* Copy the current content key into `out`. Returns 0 when none is set. */
+static int load_content_key(uint8_t out[AMO_KEY_SIZE]) {
+    int ok;
+    KEY_LOCK();
+    ok = g_has_content_key;
+    if (ok) memcpy(out, g_content_key, AMO_KEY_SIZE);
+    KEY_UNLOCK();
+    return ok;
 }
 
 static void calculate_counter_iv(uint8_t counter_iv[AMO_IV_SIZE],
@@ -499,14 +517,14 @@ int amo_open(void *user_data, char *uri, mpv_stream_cb_info *info) {
     LOGI("amo_open: keyVersion=%d", key_version);
     free(dec_metadata);
 
-    /* Derive data key. Always HMAC-SHA256(credential, courseSecret) — the v1
-       master-key path is gone. That key is a constant compiled into the binary,
+    /* The data key is the course content key the platform bridge set
+       (HMAC-SHA256(credential, courseSecret), computed by the server). The v1
+       master-key path is gone: that key is a constant compiled into the binary,
        so any file it could open was never really protected; it survives only to
        decrypt the metadata block above. */
     uint8_t data_key[AMO_KEY_SIZE];
-    if (key_version < 2 || !derive_v2_key(data_key)) {
-        LOGE("amo_open: key derivation failed (keyVersion=%d, credentials=%d)",
-             key_version, g_has_credentials);
+    if (key_version < 2 || !load_content_key(data_key)) {
+        LOGE("amo_open: no usable data key (keyVersion=%d)", key_version);
         memset(master_key, 0, AMO_KEY_SIZE);
         munmap(map, file_size);
         close(fd);
@@ -604,24 +622,56 @@ int amo_open(void *user_data, char *uri, mpv_stream_cb_info *info) {
     return 0;
 }
 
-/* ── Credential management (called from JNI) ─────────────────────────────── */
+/* ── Content key management (called from the platform bridge) ─────────────── */
 
-void amo_set_credentials(const char *credential, const char *course_secret) {
-    if (credential && course_secret) {
-        strncpy(g_credential, credential, sizeof(g_credential) - 1);
-        g_credential[sizeof(g_credential) - 1] = '\0';
-        strncpy(g_course_secret, course_secret, sizeof(g_course_secret) - 1);
-        g_course_secret[sizeof(g_course_secret) - 1] = '\0';
-        g_has_credentials = 1;
-        LOGI("amo_set_credentials: credentials set");
-    }
+static int hex_nibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
 }
 
-void amo_clear_credentials(void) {
-    memset(g_credential, 0, sizeof(g_credential));
-    memset(g_course_secret, 0, sizeof(g_course_secret));
-    g_has_credentials = 0;
-    LOGI("amo_clear_credentials: credentials cleared");
+int amo_set_content_key(const char *hex) {
+    uint8_t parsed[AMO_KEY_SIZE];
+    int ok = hex != NULL;
+    /* Stops at the first NUL, so a short string is never read past its end. */
+    for (int i = 0; ok && i < AMO_KEY_SIZE * 2; i++) {
+        if (hex[i] == '\0' || hex_nibble(hex[i]) < 0) ok = 0;
+    }
+    if (ok && hex[AMO_KEY_SIZE * 2] != '\0') ok = 0;
+    if (ok) {
+        for (int i = 0; i < AMO_KEY_SIZE; i++) {
+            parsed[i] = (uint8_t)((hex_nibble(hex[2 * i]) << 4) |
+                                  hex_nibble(hex[2 * i + 1]));
+        }
+    }
+
+    KEY_LOCK();
+    if (ok) {
+        memcpy(g_content_key, parsed, AMO_KEY_SIZE);
+        (void)mlock(g_content_key, AMO_KEY_SIZE);
+    } else {
+        /* A malformed key must not leave the previous course's key usable. */
+        memset(g_content_key, 0, AMO_KEY_SIZE);
+    }
+    g_has_content_key = ok;
+    KEY_UNLOCK();
+
+    memset(parsed, 0, sizeof(parsed));
+    if (ok) {
+        LOGI("amo_set_content_key: key set");
+    } else {
+        LOGE("amo_set_content_key: rejected a malformed key");
+    }
+    return ok;
+}
+
+void amo_clear_content_key(void) {
+    KEY_LOCK();
+    memset(g_content_key, 0, AMO_KEY_SIZE);
+    g_has_content_key = 0;
+    KEY_UNLOCK();
+    LOGI("amo_clear_content_key: key cleared");
 }
 
 #ifdef _WIN32
@@ -658,11 +708,11 @@ __declspec(dllexport) int amo_register_protocol(int64_t mpv_handle) {
     return 0;
 }
 
-__declspec(dllexport) void amo_set_credentials_ffi(const char* cred, const char* secret) {
-    amo_set_credentials(cred, secret);
+__declspec(dllexport) int amo_set_content_key_ffi(const char* hex) {
+    return amo_set_content_key(hex);
 }
 
-__declspec(dllexport) void amo_clear_credentials_ffi(void) {
-    amo_clear_credentials();
+__declspec(dllexport) void amo_clear_content_key_ffi(void) {
+    amo_clear_content_key();
 }
 #endif

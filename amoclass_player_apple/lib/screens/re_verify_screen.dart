@@ -17,7 +17,11 @@ import '../widgets/course_files_prompt.dart';
 class ReVerifyScreen extends StatefulWidget {
   final List<StoredCourse> courses;
 
-  const ReVerifyScreen({super.key, required this.courses});
+  /// Why the password is being asked for (offline limit reached, clock turned
+  /// back, session no longer accepted, …), already localized.
+  final String? notice;
+
+  const ReVerifyScreen({super.key, required this.courses, this.notice});
 
   @override
   State<ReVerifyScreen> createState() => _ReVerifyScreenState();
@@ -48,6 +52,7 @@ class _ReVerifyScreenState extends State<ReVerifyScreen>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOutCubic));
     _animCtrl.forward();
+    _error = widget.notice;
 
     // If only one course, auto-select it
     if (widget.courses.length == 1) {
@@ -64,7 +69,7 @@ class _ReVerifyScreenState extends State<ReVerifyScreen>
 
   Future<void> _handleVerify() async {
     if (_selectedCourse == null) return;
-    final password = _passwordController.text;
+    final password = _passwordController.text.trim();
     if (password.isEmpty) {
       setState(() => _error = AmoL10n.of(context).loginPasswordRequired);
       return;
@@ -93,14 +98,9 @@ class _ReVerifyScreenState extends State<ReVerifyScreen>
         orElse: () => AuthService.courses.first,
       );
       AuthService.switchCourse(courseSession);
-      // Pass credentials to native bridge for in-process decryption
-      if (AuthService.activeCredential != null &&
-          AuthService.activeCourseSecret != null) {
-        AmoNativeBridge.setCredentials(
-          AuthService.activeCredential!,
-          AuthService.activeCourseSecret!,
-        );
-      }
+      // Hand the fresh content key to the native decryptor. Playback checks
+      // the result again before opening a video.
+      await AmoNativeBridge.setContentKey(AuthService.activeContentKey ?? '');
       // Clear library cache + temp files for clean course isolation
       LibraryService.clearCache();
       DecryptionService.cleanupTempFiles();

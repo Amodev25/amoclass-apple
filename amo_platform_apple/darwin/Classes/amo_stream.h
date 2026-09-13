@@ -66,13 +66,17 @@ typedef struct {
 int amo_open(void *user_data, char *uri, mpv_stream_cb_info *info);
 
 /**
- * Set credentials for v2 key derivation. Call before playback.
+ * Set the course content key: exactly 64 hex digits (the 32-byte key the
+ * server computed). Call before playback.
+ *
+ * Returns 1 when the key was stored, 0 when `hex` is malformed — in which case
+ * any previously set key is cleared too.
  */
-void amo_set_credentials(const char *credential, const char *course_secret);
+int amo_set_content_key(const char *hex);
 
 /**
- * Clear credentials from native memory. Call on logout/course switch.
+ * Clear the content key from native memory. Call on logout/course switch.
  */
-void amo_clear_credentials(void);
+void amo_clear_content_key(void);
 
 #endif /* AMO_STREAM_H */

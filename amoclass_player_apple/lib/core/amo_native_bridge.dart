@@ -37,30 +37,33 @@ class AmoNativeBridge {
     }
   }
 
-  /// Set credentials for v2 key derivation (call before playback).
-  static Future<void> setCredentials(
-    String credential,
-    String courseSecret,
-  ) async {
+  /// Hand the course content key (64 hex digits, computed by the server) to
+  /// the native decryptor. Call before playback.
+  ///
+  /// Returns false when the key is malformed or the native side is missing —
+  /// and in that case the native side holds NO key, so a caller must not start
+  /// playback on a false.
+  static Future<bool> setContentKey(String contentKey) async {
     try {
-      await _channel.invokeMethod('setCredentials', {
-        'credential': credential,
-        'courseSecret': courseSecret,
+      final ok = await _channel.invokeMethod<bool>('setContentKey', {
+        'contentKey': contentKey,
       });
+      return ok ?? false;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[AmoNativeBridge] setCredentials error: $e');
+        debugPrint('[AmoNativeBridge] setContentKey error: $e');
       }
+      return false;
     }
   }
 
-  /// Clear credentials from native memory (call on logout/course switch).
-  static Future<void> clearCredentials() async {
+  /// Clear the content key from native memory (logout / course switch).
+  static Future<void> clearContentKey() async {
     try {
-      await _channel.invokeMethod('clearCredentials');
+      await _channel.invokeMethod('clearContentKey');
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[AmoNativeBridge] clearCredentials error: $e');
+        debugPrint('[AmoNativeBridge] clearContentKey error: $e');
       }
     }
   }

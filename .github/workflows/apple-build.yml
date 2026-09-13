@@ -16,6 +16,12 @@ on:
       # — otherwise a fix to the check silently never runs.
       - 'scripts/**'
   pull_request:
+    paths:
+      - 'amoclass_player_apple/**'
+      - 'amo_platform_apple/**'
+      - 'amoclass_core/**'
+      - '.github/workflows/apple-build.yml'
+      - 'scripts/**'
   workflow_dispatch:
 
 concurrency:
@@ -43,6 +49,14 @@ jobs:
         run: flutter pub get
       - name: Analyze
         working-directory: amoclass_player_apple
+        run: flutter analyze
+      # The shared package is compiled into this app, so a break there is a
+      # break here too.
+      - name: Install dependencies (amoclass_core)
+        working-directory: amoclass_core
+        run: flutter pub get
+      - name: Analyze amoclass_core
+        working-directory: amoclass_core
         run: flutter analyze
       - name: Unit tests
         working-directory: amoclass_player_apple
@@ -81,7 +95,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: macos-debug-app
+          name: lockclass-macos-debug-app
           path: amoclass_player_apple/build/macos/Build/Products/Debug/*.app
           retention-days: 7
           if-no-files-found: error
@@ -104,9 +118,9 @@ jobs:
             exit 1
           fi
 
-          # Read the executable name rather than guessing it: PRODUCT_NAME is
-          # "AMO Player", so the path contains a space and the bundle name and
-          # the binary name are not required to match.
+          # Read the executable name rather than guessing it: the bundle name
+          # and the binary name are not required to match, and a product name
+          # may contain a space.
           EXE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")
           BIN="$APP/Contents/MacOS/$EXE"
           echo "launching: $BIN"
@@ -160,7 +174,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: macos-launch-failure
+          name: lockclass-macos-launch-failure
           path: |
             amoclass_player_apple/launch.log
             amoclass_player_apple/crashlogs
@@ -204,7 +218,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-simulator-app
+          name: lockclass-ios-simulator-app
           path: amoclass_player_apple/build/ios/iphonesimulator/*.app
           retention-days: 7
           if-no-files-found: error
@@ -244,8 +258,8 @@ jobs:
           test -n "$APP"
           rm -rf /tmp/ipa && mkdir -p /tmp/ipa/Payload
           cp -R "$APP" /tmp/ipa/Payload/
-          (cd /tmp/ipa && zip -qry "$OLDPWD/build/AmoPlayer-unsigned.ipa" Payload)
-          ls -lh build/AmoPlayer-unsigned.ipa
+          (cd /tmp/ipa && zip -qry "$OLDPWD/build/Lockclass-unsigned.ipa" Payload)
+          ls -lh build/Lockclass-unsigned.ipa
 
       - name: Verify the native decryptor linked in
         working-directory: amoclass_player_apple
@@ -254,7 +268,7 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: ios-unsigned-ipa
-          path: amoclass_player_apple/build/AmoPlayer-unsigned.ipa
+          name: lockclass-ios-unsigned-ipa
+          path: amoclass_player_apple/build/Lockclass-unsigned.ipa
           retention-days: 7
           if-no-files-found: error

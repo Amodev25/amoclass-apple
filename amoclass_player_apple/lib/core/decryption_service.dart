@@ -188,8 +188,12 @@ class DecryptionService {
 
     final raf = await file.open(mode: FileMode.read);
     try {
+      final fileLength = await raf.length();
+      if (fileLength < AmoConstants.headerSize) return null;
       final headerBytes = Uint8List(AmoConstants.headerSize);
-      await raf.readInto(headerBytes);
+      if (await raf.readInto(headerBytes) != AmoConstants.headerSize) {
+        return null;
+      }
 
       // Verify magic bytes
       for (int i = 0; i < AmoConstants.magicBytes.length; i++) {
@@ -236,11 +240,25 @@ class DecryptionService {
         headerBytes.sublist(offset, offset + AmoConstants.hmacSize),
       );
 
+      // Bounds BEFORE any allocation: every length comes from the file, and a
+      // crafted header could otherwise ask for gigabytes (contract §3.10).
+      if (!headerFits(
+        fileLength: fileLength,
+        metadataLength: metadataLength,
+        thumbnailLength: thumbnailLength,
+        videoDataLength: videoDataLength,
+      )) {
+        if (kDebugMode) {
+          debugPrint('[AMO] header lengths exceed the file: $filePath');
+        }
+        return null;
+      }
+
       // Read and decrypt metadata
       final metadataOffset = AmoConstants.headerSize;
       final encryptedMetadata = Uint8List(metadataLength);
       await raf.setPosition(metadataOffset);
-      await raf.readInto(encryptedMetadata);
+      if (await raf.readInto(encryptedMetadata) != metadataLength) return null;
 
       final masterKey = AmoConstants.getMasterKey();
       final decryptedMetadata = decryptChunk(
@@ -291,28 +309,46 @@ class DecryptionService {
     }
   }
 
-  /// Get the correct data key based on key version.
-  static Uint8List _getDataKey(AmoFileHeader header) {
-    if (header.keyVersion >= 2) {
-      final credential = AuthService.activeCredential;
-      final courseSecret = AuthService.activeCourseSecret;
-      if (credential != null && courseSecret != null) {
-        final hmac = crypto_lib.Hmac(
-          crypto_lib.sha256,
-          utf8.encode(credential),
-        );
-        final digest = hmac.convert(utf8.encode(courseSecret));
-        return Uint8List.fromList(digest.bytes);
-      }
+  /// Largest metadata block accepted. Real metadata is a few hundred bytes of
+  /// JSON; the cap stops a crafted header from making us allocate the file.
+  static const int maxMetadataLength = 1024 * 1024;
+
+  /// Whether the lengths a header declares fit inside a file of [fileLength]
+  /// bytes. Checked before anything is allocated from those lengths.
+  @visibleForTesting
+  static bool headerFits({
+    required int fileLength,
+    required int metadataLength,
+    required int thumbnailLength,
+    required int videoDataLength,
+  }) {
+    if (metadataLength <= 0 || metadataLength > maxMetadataLength) return false;
+    if (thumbnailLength < 0 || videoDataLength < 0) return false;
+    final available = fileLength - AmoConstants.headerSize;
+    if (available < 0) return false;
+    // Compared one at a time, so the sum cannot overflow.
+    if (metadataLength > available) return false;
+    if (thumbnailLength > available - metadataLength) return false;
+    return videoDataLength <= available - metadataLength - thumbnailLength;
+  }
+
+  /// The data key for v2 content: the active course's content key (64 hex
+  /// digits, computed by the server). Null — and so every check fails closed —
+  /// for older containers or when no well-formed key is held.
+  static Uint8List? _getDataKey(AmoFileHeader header) {
+    if (header.keyVersion < 2) return null;
+    return contentKeyBytes(AuthService.activeContentKey);
+  }
+
+  /// Decodes a 64-hex-digit content key into its 32 bytes, or null.
+  @visibleForTesting
+  static Uint8List? contentKeyBytes(String? hex) {
+    if (!isValidContentKey(hex)) return null;
+    final out = Uint8List(32);
+    for (var i = 0; i < 32; i++) {
+      out[i] = int.parse(hex!.substring(i * 2, i * 2 + 2), radix: 16);
     }
-    // Fallback to legacy master key — log warning
-    if (kDebugMode) {
-      debugPrint(
-        '[AMO] WARNING: Using legacy master key (v1) — '
-        'consider re-encrypting with derived keys (v2+)',
-      );
-    }
-    return AmoConstants.getMasterKey();
+    return out;
   }
 
   /// Zero out a key buffer to prevent lingering key material in memory.
@@ -320,16 +356,6 @@ class DecryptionService {
     for (int i = 0; i < key.length; i++) {
       key[i] = 0;
     }
-  }
-
-  /// Get the app-private temp directory for decrypted files.
-  static Future<Directory> _getSecureTempDir() async {
-    final appDir = await getApplicationSupportDirectory();
-    final tmpDir = Directory('${appDir.path}/amo_tmp');
-    if (!await tmpDir.exists()) {
-      await tmpDir.create(recursive: true);
-    }
-    return tmpDir;
   }
 
   /// Securely delete a file by overwriting with zeros before removal.
@@ -374,6 +400,7 @@ class DecryptionService {
     if (header.keyVersion < 2) return false;
 
     final dataKey = _getDataKey(header);
+    if (dataKey == null) return false;
     final file = File(filePath);
     final raf = await file.open(mode: FileMode.read);
 
@@ -386,7 +413,7 @@ class DecryptionService {
 
       await raf.setPosition(thumbStart);
       final hmacData = Uint8List(hmacDataLen);
-      await raf.readInto(hmacData);
+      if (await raf.readInto(hmacData) != hmacDataLen) return false;
 
       final hmacComputer = crypto_lib.Hmac(crypto_lib.sha256, dataKey);
       final computed = hmacComputer.convert(hmacData);
@@ -400,6 +427,7 @@ class DecryptionService {
       }
       return diff == 0;
     } finally {
+      _zeroKey(dataKey);
       await raf.close();
     }
   }
@@ -428,6 +456,7 @@ class DecryptionService {
       await raf.readInto(encryptedThumb);
 
       dataKey = _getDataKey(header);
+      if (dataKey == null) return null;
       final offset = header.metadataLength;
       return decryptChunk(encryptedThumb, dataKey, header.iv, offset);
     } finally {
@@ -471,6 +500,9 @@ class DecryptionService {
       );
 
       if (thumbnailLength == 0) return null;
+      if (metadataLength <= 0 || metadataLength > maxMetadataLength) {
+        return null;
+      }
 
       final metadataOffset = AmoConstants.headerSize;
       final thumbnailOffset = metadataOffset + metadataLength;
@@ -489,22 +521,10 @@ class DecryptionService {
       );
       final keyVersion = (metadataJson['keyVersion'] ?? 1) as int;
 
-      // Derive the data key: v2+ = HMAC(credential, courseSecret), else master.
-      Uint8List dataKey;
-      if (keyVersion >= 2) {
-        final credential = AuthService.activeCredential;
-        final courseSecret = AuthService.activeCourseSecret;
-        if (credential == null || courseSecret == null) return null;
-        final hmac = crypto_lib.Hmac(
-          crypto_lib.sha256,
-          utf8.encode(credential),
-        );
-        dataKey = Uint8List.fromList(
-          hmac.convert(utf8.encode(courseSecret)).bytes,
-        );
-      } else {
-        dataKey = masterKey;
-      }
+      // v2 content only: the data key is the course content key.
+      if (keyVersion < 2) return null;
+      final dataKey = contentKeyBytes(AuthService.activeContentKey);
+      if (dataKey == null) return null;
 
       final encryptedThumb = Uint8List.sublistView(
         bytes,
@@ -533,6 +553,7 @@ class DecryptionService {
     try {
       final base = header.metadataLength + header.thumbnailLength;
       dataKey = _getDataKey(header);
+      if (dataKey == null) throw const AmoWrongCourseException();
 
       // PDFs are one continuous CTR stream — any offset is a valid start.
       if (header.isPdf) {
@@ -574,111 +595,53 @@ class DecryptionService {
     }
   }
 
-  /// Decrypt entire video to a temporary file for playback.
-  /// Throws [AmoWrongCourseException] if HMAC fails.
-  /// Throws [AmoDecryptionException] on other decryption errors.
-  static Future<String> decryptToTempFile(
+  /// Largest PDF body decrypted into memory.
+  static const int maxInMemoryPdfBytes = 256 * 1024 * 1024;
+
+  /// Decrypts a PDF body into memory — never to disk (contract §3.9).
+  ///
+  /// The caller owns the returned buffer and should zero it when the document
+  /// closes ([wipe]). Throws [AmoWrongCourseException] when the HMAC does not
+  /// match the active course key, [AmoFileCorruptedException] when the file
+  /// is not a readable PDF container, [AmoDecryptionException] otherwise.
+  static Future<Uint8List> decryptToMemory(
     String filePath,
-    AmoFileHeader header, {
-    void Function(double progress)? onProgress,
-  }) async {
-    final hmacOk = await verifyHmac(filePath, header);
-    if (!hmacOk) {
+    AmoFileHeader header,
+  ) async {
+    if (!header.isPdf) throw const AmoFileCorruptedException();
+    if (header.videoDataLength <= 0 ||
+        header.videoDataLength > maxInMemoryPdfBytes) {
+      throw const AmoFileCorruptedException();
+    }
+    if (!await verifyHmac(filePath, header)) {
       throw const AmoWrongCourseException();
     }
-
-    final tempDir = await _getSecureTempDir();
-    final random = Random.secure();
-    final randomId = List.generate(
-      16,
-      (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
-    ).join();
-    // Use .tmp extension — don't hint at original file type
-    final tempFile = File('${tempDir.path}/amo_play_$randomId.tmp');
-
-    final sourceFile = File(filePath);
-    final raf = await sourceFile.open(mode: FileMode.read);
-    final sink = tempFile.openWrite();
     final dataKey = _getDataKey(header);
+    if (dataKey == null) throw const AmoWrongCourseException();
 
+    final total = header.videoDataLength;
+    final out = Uint8List(total);
+    final raf = await File(filePath).open(mode: FileMode.read);
     try {
       await raf.setPosition(header.videoDataOffset);
-
-      int bytesDecrypted = 0;
-      final totalSize = header.videoDataLength;
-      final readBuffer = Uint8List(AmoConstants.chunkSize);
-
-      int loopCount = 0;
-      while (bytesDecrypted < totalSize) {
-        final remaining = totalSize - bytesDecrypted;
-
-        if (header.contentType == 'pdf') {
-          final chunkSize = remaining < AmoConstants.chunkSize
-              ? remaining
-              : AmoConstants.chunkSize;
-
-          final encryptedChunk = chunkSize == AmoConstants.chunkSize
-              ? readBuffer
-              : Uint8List(chunkSize);
-          final bytesRead = await raf.readInto(encryptedChunk);
-          if (bytesRead == 0) break;
-
-          final actualChunk = bytesRead < chunkSize
-              ? Uint8List.fromList(encryptedChunk.sublist(0, bytesRead))
-              : encryptedChunk;
-
-          final encryptionOffset =
-              header.metadataLength + header.thumbnailLength + bytesDecrypted;
-          final decryptedChunk = decryptChunk(
-            actualChunk,
-            dataKey,
-            header.iv,
-            encryptionOffset,
-          );
-
-          sink.add(decryptedChunk);
-          bytesDecrypted += bytesRead;
-        } else {
-          // Video: v2 pattern — 16 encrypted bytes of every 160, uniformly.
-          final blockSize = remaining < AmoConstants.videoBlockSize
-              ? remaining
-              : AmoConstants.videoBlockSize;
-
-          final blockBuffer = Uint8List(blockSize);
-          final bytesRead = await raf.readInto(blockBuffer);
-          if (bytesRead == 0) break;
-
-          // A view, not a copy: patternXcryptInPlace writes through it.
-          final actualBlock = bytesRead < blockSize
-              ? Uint8List.sublistView(blockBuffer, 0, bytesRead)
-              : blockBuffer;
-
-          // 10 MB is a whole number of strides, so every block after the first
-          // still starts on a stride boundary.
-          patternXcryptInPlace(
-            actualBlock,
-            dataKey,
-            header.iv,
-            header.metadataLength + header.thumbnailLength,
-            bytesDecrypted,
-          );
-          sink.add(actualBlock);
-
-          bytesDecrypted += bytesRead;
-        }
-
-        loopCount++;
-        if (loopCount % 4 == 0) await Future.delayed(Duration.zero);
-
-        onProgress?.call(bytesDecrypted / totalSize);
+      final base = header.metadataLength + header.thumbnailLength;
+      var done = 0;
+      var loops = 0;
+      while (done < total) {
+        final take = min(AmoConstants.chunkSize, total - done);
+        final view = Uint8List.sublistView(out, done, done + take);
+        final read = await raf.readInto(view);
+        if (read != take) throw const AmoFileCorruptedException();
+        // PDFs are one continuous CTR stream: decrypt this span in place.
+        final plain = decryptChunk(view, dataKey, header.iv, base + done);
+        out.setRange(done, done + take, plain);
+        wipe(plain);
+        done += take;
+        if (++loops % 4 == 0) await Future<void>.delayed(Duration.zero);
       }
-
-      await sink.flush();
-      await sink.close();
-      return tempFile.path;
+      return out;
     } catch (e) {
-      await sink.close();
-      if (await tempFile.exists()) await _secureDelete(tempFile);
+      wipe(out);
       if (e is AmoWrongCourseException || e is AmoFileCorruptedException) {
         rethrow;
       }
@@ -689,7 +652,11 @@ class DecryptionService {
     }
   }
 
-  /// Clean up temp files — securely wipes all decrypted content.
+  /// Overwrites a decrypted buffer with zeros.
+  static void wipe(Uint8List bytes) => bytes.fillRange(0, bytes.length, 0);
+
+  /// Clean up temp files — securely wipes any decrypted content an older
+  /// build left on disk (this build no longer writes any).
   /// Also cleans legacy files from system temp dir.
   static Future<void> cleanupTempFiles() async {
     clearHeaderCache();

@@ -18,7 +18,7 @@ dependencies:
   amo_core:
     path: ../amoclass_core
 
-  # Apple platform layer: anti-capture, focus mode, audio output and the
+  # Apple platform layer: anti-capture, audio output, storage and the
   # amo:// in-process decryption channel (replaces the Android MainActivity).
   amo_platform_apple:
     path: ../amo_platform_apple
@@ -39,8 +39,6 @@ dependencies:
   syncfusion_flutter_pdfviewer: ^33.1.49
   # Keychain-backed secure storage (works on both iOS and macOS)
   flutter_secure_storage: ^10.3.1
-  # macOS-only window control (desktop affordances ported from the Windows app)
-  window_manager: ^0.5.1
 
 dev_dependencies:
   path_provider_platform_interface: ^2.1.3

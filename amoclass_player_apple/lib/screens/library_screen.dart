@@ -9,6 +9,7 @@ import '../services/session_service.dart';
 import '../services/progress_service.dart';
 import '../services/remote_library_service.dart';
 import '../core/decryption_service.dart';
+import '../core/amo_native_bridge.dart';
 import '../core/audio_output_platform.dart';
 import '../core/storage_platform.dart';
 import '../services/auth_service.dart';
@@ -16,8 +17,6 @@ import 'player_screen.dart';
 import 'pdf_viewer_screen.dart';
 import 'course_select_screen.dart';
 import 're_verify_screen.dart';
-import '../widgets/focus_mode_widgets.dart';
-import '../services/focus_mode_service.dart';
 import 'package:amo_core/amo_core.dart';
 
 enum SortOption {
@@ -140,29 +139,29 @@ class _LibraryScreenState extends State<LibraryScreen>
   Future<void> _periodicSessionCheck() async {
     final check = await SessionService.periodicCheck();
     if (!mounted) return;
+    SessionService.handleCheck(context, check);
+  }
 
-    switch (check.result) {
-      case SessionResult.ok:
-        break; // all good
-      case SessionResult.needsReVerify:
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => ReVerifyScreen(courses: check.storedCourses),
-          ),
-          (route) => false,
-        );
-        break;
-      case SessionResult.needsFullLogin:
-        SessionService.showForceLogout(context, 'session_expired');
-        break;
-      case SessionResult.blocked:
-        SessionService.showForceLogout(
-          context,
-          check.blockedReason ?? 'invalid',
-          serverCode: check.blockedServerCode,
-        );
-        break;
+  /// The worker no longer accepts this course's session (401 /
+  /// SESSION_INVALID): ask for the password again — never treat it as offline.
+  Future<void> _sendActiveCourseToReVerify() async {
+    final activeId = AuthService.loggedInStudentId;
+    final stored = await SessionService.getStoredCourses();
+    if (!mounted) return;
+    final courses = stored.where((c) => c.studentId == activeId).toList();
+    if (courses.isEmpty) {
+      SessionService.showForceLogout(context, 'session_expired');
+      return;
     }
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => ReVerifyScreen(
+          courses: courses,
+          notice: AmoL10n.of(context).srvSessionInvalid,
+        ),
+      ),
+      (route) => false,
+    );
   }
 
   Future<void> _animateTabSwitch(int newIndex) async {
@@ -689,16 +688,13 @@ class _LibraryScreenState extends State<LibraryScreen>
     int playlistIndex = 0,
     double initialSpeed = 1.0,
   }) async {
-    // Content gate: re-verify the session with the server before opening any
-    // content. Uses a 24h cache and fails open when offline, so it never blocks
-    // legitimate offline use — but a revoked / expired / blocked account is
-    // caught here the next time the device is online.
+    // Content gate: runs before opening ANY lesson, video or PDF. The local
+    // offline policy (clock rollback, access end, offline open limit) applies
+    // every time; the server round trip uses a 24h cache. A revoked / expired
+    // / blocked account is caught here the next time the device is online.
     final gate = await SessionService.checkBeforeContent();
     if (!mounted) return;
-    if (gate != null) {
-      SessionService.showForceLogout(context, gate);
-      return;
-    }
+    if (!SessionService.handleCheck(context, gate)) return;
 
     if (video.isPdf) {
       Navigator.push(
@@ -736,6 +732,18 @@ class _LibraryScreenState extends State<LibraryScreen>
           SnackBar(content: Text(AmoL10n.of(context).errVerificationFailed)),
         );
       }
+      return;
+    }
+    // The native decryptor must actually hold this course's key; a refused
+    // key would only surface later as an unplayable stream.
+    final keyOk = await AmoNativeBridge.setContentKey(
+      AuthService.activeContentKey ?? '',
+    );
+    if (!mounted) return;
+    if (!keyOk) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AmoL10n.of(context).errOpenFailedSupport)),
+      );
       return;
     }
     final String videoPath = 'amo://${video.filePath}';
@@ -1100,17 +1108,6 @@ class _LibraryScreenState extends State<LibraryScreen>
             child: const LockMark(size: 20, color: Colors.white, weight: 9.0),
           ),
           const Spacer(),
-          // Focus Mode icon button
-          ListenableBuilder(
-            listenable: FocusModeService.instance,
-            builder: (context, _) => _buildIconButton(
-              Icons.center_focus_strong,
-              () => showFocusModeDialog(context),
-              isPrimary: FocusModeService.instance.isActive,
-              tooltip: AmoL10n.of(context).focusModeTitle,
-            ),
-          ),
-          const SizedBox(width: 4),
           // Another Course button
           _buildIconButton(
             Icons.add_card_outlined,
@@ -1128,7 +1125,6 @@ class _LibraryScreenState extends State<LibraryScreen>
   Widget _buildIconButton(
     IconData icon,
     VoidCallback onTap, {
-    bool isPrimary = false,
     String? tooltip,
   }) {
     return Material(
@@ -1142,18 +1138,14 @@ class _LibraryScreenState extends State<LibraryScreen>
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: isPrimary
-                  ? Colors.white.withValues(alpha: 0.1)
-                  : Colors.transparent,
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(8),
             ),
             alignment: Alignment.center,
             child: Icon(
               icon,
               size: 20,
-              color: isPrimary
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: 0.7),
+              color: Colors.white.withValues(alpha: 0.7),
             ),
           ),
         ),
@@ -1528,6 +1520,11 @@ class _LibraryScreenState extends State<LibraryScreen>
         // Stale session: student or server code no longer valid — force re-login.
         // Matched on the worker's code, because `msg` is localized.
         final code = e is AmoServerException ? e.code : null;
+        if (code == 'APP_UPDATE_REQUIRED') return; // dialog already shown
+        if (code == 'SESSION_INVALID') {
+          await _sendActiveCourseToReVerify();
+          return;
+        }
         if (code == 'STUDENT_NOT_FOUND' || code == 'INVALID_LOGIN') {
           SessionService.showForceLogout(context, 'session_expired');
           return;
@@ -1596,6 +1593,16 @@ class _LibraryScreenState extends State<LibraryScreen>
           _downloadProgress.remove(file.id);
           _downloadCancelTokens.remove(file.id);
         });
+        if (e is InsufficientStorageException) {
+          _showNotEnoughSpaceDialog(e.neededBytes, e.availableBytes);
+          return;
+        }
+        final code = e is AmoServerException ? e.code : null;
+        if (code == 'APP_UPDATE_REQUIRED') return; // dialog already shown
+        if (code == 'SESSION_INVALID') {
+          await _sendActiveCourseToReVerify();
+          return;
+        }
         if (!cancelToken.isCancelled) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -2670,15 +2677,18 @@ class _LibraryScreenState extends State<LibraryScreen>
                             right: 0,
                             child: Builder(
                               builder: (_) {
+                                final progressKey = ProgressService.keyFor(
+                                  video.filePath,
+                                );
                                 final progress =
                                     ProgressService.getProgressFraction(
-                                      video.filePath,
+                                      progressKey,
                                     );
                                 if (progress <= 0) {
                                   return const SizedBox.shrink();
                                 }
                                 final watched = ProgressService.isWatched(
-                                  video.filePath,
+                                  progressKey,
                                 );
                                 return Container(
                                   height: 3,
@@ -2702,7 +2712,10 @@ class _LibraryScreenState extends State<LibraryScreen>
                           ),
                         ],
                         // Watched badge
-                        if (!isPdf && ProgressService.isWatched(video.filePath))
+                        if (!isPdf &&
+                            ProgressService.isWatched(
+                              ProgressService.keyFor(video.filePath),
+                            ))
                           PositionedDirectional(
                             top: 4,
                             end: 4,

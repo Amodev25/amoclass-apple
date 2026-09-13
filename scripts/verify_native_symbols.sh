@@ -12,7 +12,7 @@ set -uo pipefail
 
 ROOT="${1:?usage: verify_native_symbols.sh <build output dir>}"
 
-REQUIRED_SYMBOLS="_amo_register_protocol _amo_open _amo_set_credentials"
+REQUIRED_SYMBOLS="_amo_register_protocol _amo_open _amo_set_content_key"
 
 if [ ! -d "$ROOT" ]; then
   echo "build output directory does not exist: $ROOT" >&2

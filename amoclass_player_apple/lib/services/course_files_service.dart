@@ -12,8 +12,9 @@ class CourseFilesService {
 
   /// Every file stored for [serverCode]: the course folder (imports, index,
   /// previews) plus online downloads whose container header names that course.
-  /// Online downloads share one folder across courses, which is why they are
-  /// matched by header rather than by location.
+  /// Downloads live in `AmoOnlineFiles/<courseId>/`, and a course id is not a
+  /// server code, which is why they are matched by header rather than by
+  /// location.
   static Future<List<File>> filesFor(String serverCode) async {
     // The code becomes part of a path; anything but a plain code could point
     // outside the courses folder.
@@ -33,7 +34,10 @@ class CourseFilesService {
     for (final dir in await _onlineDirs()) {
       try {
         if (!await dir.exists()) continue;
-        await for (final entity in dir.list(followLinks: false)) {
+        await for (final entity in dir.list(
+          recursive: true,
+          followLinks: false,
+        )) {
           if (entity is! File) continue;
           final header = await DecryptionService.parseHeader(entity.path);
           if (header != null && header.serverCode == serverCode) {
@@ -171,19 +175,15 @@ class CourseFilesService {
     return Directory('${support.path}/courses/$serverCode');
   }
 
-  /// Where the online tab saves downloads (see RemoteLibraryService).
+  /// Where the online tab saves downloads: one folder per course id inside
+  /// `AmoOnlineFiles` in Application Support (see
+  /// RemoteLibraryService.onlineRoot).
   static Future<List<Directory>> _onlineDirs() async {
-    final dirs = <Directory>[];
     try {
-      final docs = await getApplicationDocumentsDirectory();
-      dirs.add(Directory('${docs.path}/AmoOnlineFiles'));
-    } catch (_) {}
-    if (Platform.isAndroid) {
-      try {
-        final ext = await getExternalStorageDirectory();
-        if (ext != null) dirs.add(Directory('${ext.path}/AmoOnlineFiles'));
-      } catch (_) {}
+      final support = await getApplicationSupportDirectory();
+      return [Directory('${support.path}/AmoOnlineFiles')];
+    } catch (_) {
+      return const [];
     }
-    return dirs;
   }
 }

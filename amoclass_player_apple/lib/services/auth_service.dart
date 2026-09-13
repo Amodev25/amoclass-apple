@@ -1,13 +1,24 @@
 import 'package:amo_core/amo_core.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/services.dart';
 import 'session_service.dart';
 import 'library_service.dart';
 import '../core/decryption_service.dart';
 import '../core/amo_native_bridge.dart';
+import '../core/app_build.dart';
+import '../core/app_update_gate.dart';
+import '../core/device_identity.dart';
 import '../core/platform_identity.dart';
 import 'course_files_service.dart';
+
+/// A course content key as the worker sends it: 32 bytes as 64 hex digits.
+final RegExp kContentKeyPattern = RegExp(r'^[0-9a-fA-F]{64}$');
+
+bool isValidContentKey(String? key) =>
+    key != null && kContentKeyPattern.hasMatch(key);
+
+const Object _unset = Object();
 
 /// Represents one course session a student belongs to.
 class CourseSession {
@@ -17,8 +28,20 @@ class CourseSession {
   final String teacherName;
   final String courseName;
   final String? serverCode;
-  final String? credential;
-  final String? courseSecret;
+
+  /// The course's database id. Online downloads live under
+  /// `AmoOnlineFiles/<courseId>/`, so two courses never share a folder.
+  final int? courseId;
+
+  /// The course content key (64 hex digits), computed by the worker. The
+  /// teacher credential and course secret it is derived from never reach the
+  /// app.
+  final String? contentKey;
+
+  /// The earliest end of access the server knows (ISO-8601), or null when
+  /// access is unbounded. Enforced offline too.
+  final String? accessEndsAt;
+
   final bool requireHeadphones;
 
   /// The student's seat number (`رقم الجلوس`) in THIS course — spec D7.
@@ -33,10 +56,18 @@ class CourseSession {
   /// Bearer token for every later call about THIS enrolment.
   ///
   /// One per course, not one per person: each enrolment is its own row on the
-  /// server, and the token names exactly one of them. Null only for a session
-  /// restored from a file written before tokens existed, which the server will
-  /// reject — forcing a fresh sign-in, which is the correct outcome.
+  /// server, and the token names exactly one of them.
   final String? sessionToken;
+
+  /// The password this enrolment was last signed in or re-verified with,
+  /// exactly as sent to the worker (trimmed). Drawn over lessons by
+  /// `StudentWatermark` (owner decision 2026-09-14).
+  ///
+  /// Never read from a server response: [AuthService.requestLogin] attaches it
+  /// after a successful login. Persisted only inside the keychain session
+  /// entry; never logged or sent anywhere else. Null for a session stored
+  /// before passwords were kept.
+  final String? password;
 
   const CourseSession({
     required this.studentId,
@@ -45,11 +76,13 @@ class CourseSession {
     required this.teacherName,
     required this.courseName,
     this.serverCode,
-    this.credential,
-    this.courseSecret,
+    this.courseId,
+    this.contentKey,
+    this.accessEndsAt,
     this.requireHeadphones = false,
     this.seatNo,
     this.sessionToken,
+    this.password,
   });
 
   factory CourseSession.fromJson(Map<String, dynamic> j) => CourseSession(
@@ -59,11 +92,38 @@ class CourseSession {
     teacherName: j['teacherName'] as String,
     courseName: (j['courseName'] as String?) ?? (j['teacherName'] as String),
     serverCode: j['serverCode'] as String?,
-    credential: j['credential'] as String?,
-    courseSecret: j['courseSecret'] as String?,
+    courseId: (j['courseId'] as num?)?.toInt(),
+    contentKey: j['contentKey'] as String?,
+    accessEndsAt: j['accessEndsAt'] as String?,
     requireHeadphones: j['requireHeadphones'] as bool? ?? false,
     seatNo: j['seatNo'] as int?,
     sessionToken: j['sessionToken'] as String?,
+  );
+
+  CourseSession copyWith({
+    String? contentKey,
+    Object? accessEndsAt = _unset,
+    bool? requireHeadphones,
+    int? seatNo,
+    String? sessionToken,
+    String? password,
+  }) => CourseSession(
+    studentId: studentId,
+    studentName: studentName,
+    teacherId: teacherId,
+    teacherName: teacherName,
+    courseName: courseName,
+    serverCode: serverCode,
+    courseId: courseId,
+    contentKey: contentKey ?? this.contentKey,
+    accessEndsAt: identical(accessEndsAt, _unset)
+        ? this.accessEndsAt
+        : accessEndsAt as String?,
+    requireHeadphones: requireHeadphones ?? this.requireHeadphones,
+    seatNo: seatNo ?? this.seatNo,
+    sessionToken: sessionToken ?? this.sessionToken,
+    // A token refresh passes no password, so the stored one is KEPT.
+    password: password ?? this.password,
   );
 }
 
@@ -85,13 +145,23 @@ class LoginFailure {
   const LoginFailure(this.message, [this.code]);
 }
 
+/// The outcome of one POST /auth/login: the courses, or why not.
+class LoginAttempt {
+  final List<CourseSession>? courses;
+  final LoginFailure? failure;
+
+  const LoginAttempt._(this.courses, this.failure);
+  const LoginAttempt.succeeded(List<CourseSession> courses)
+    : this._(courses, null);
+  const LoginAttempt.failed(LoginFailure failure) : this._(null, failure);
+}
+
 /// Service to authenticate students against the AMO web server.
 class AuthService {
   static const String baseUrl =
       'https://amo-student-worker.doctoramr0101.workers.dev';
   static const String workerUrl =
       'https://amo-student-worker.doctoramr0101.workers.dev';
-  static const _channel = MethodChannel('com.lockclass/anti_capture');
 
   /// Session tokens by studentId — one per enrolment the app holds.
   ///
@@ -104,20 +174,27 @@ class AuthService {
   static int? _loggedInStudentId;
   static String? _activeSessionToken;
   static int? _activeCourseTeacherId;
+  static int? _activeCourseId;
   static String? _loggedInServerCode;
-  static String? _activeCredential;
-  static String? _activeCourseSecret;
+  static String? _activeContentKey;
+  static String? _activeAccessEndsAt;
   static bool _activeRequireHeadphones = false;
+  static String? _activePassword;
 
   /// All courses returned after successful login.
   static List<CourseSession> _courses = [];
 
   static String? get loggedInStudentName => _loggedInStudentName;
+
+  /// The active course's password, for the lesson watermark only. Null when
+  /// signed out or for a session stored before passwords were kept.
+  static String? get activePassword => _activePassword;
   static int? get loggedInStudentId => _loggedInStudentId;
   static int? get activeCourseTeacherId => _activeCourseTeacherId;
+  static int? get activeCourseId => _activeCourseId;
   static String? get loggedInServerCode => _loggedInServerCode;
-  static String? get activeCredential => _activeCredential;
-  static String? get activeCourseSecret => _activeCourseSecret;
+  static String? get activeContentKey => _activeContentKey;
+  static String? get activeAccessEndsAt => _activeAccessEndsAt;
   static bool get activeRequireHeadphones => _activeRequireHeadphones;
   static bool get isLoggedIn => _loggedInStudentName != null;
 
@@ -128,41 +205,165 @@ class AuthService {
   static String? tokenFor(int studentId) => _sessionTokens[studentId];
 
   /// Authorization header for the active course, or empty when signed out.
-  /// Empty rather than absent so callers can spread it unconditionally; the
-  /// server answers 401 either way.
   static Map<String, String> get authHeaders => _activeSessionToken == null
       ? const {}
       : {'Authorization': 'Bearer $_activeSessionToken'};
+
+  /// Everything a request to the student worker carries: the build number
+  /// (always) and the active course's bearer token (when signed in).
+  static Map<String, String> get workerHeaders => {
+    ...kAppBuildHeaders,
+    ...authHeaders,
+  };
 
   /// Record a token, and keep the active one in step when it is the same course.
   static void rememberToken(int studentId, String token) {
     _sessionTokens[studentId] = token;
     if (_loggedInStudentId == studentId) _activeSessionToken = token;
   }
+
   static List<CourseSession> get courses => List.unmodifiable(_courses);
 
-  /// Update credential and courseSecret from verify-session response.
-  static void updateCredentials(
-    String? credential,
-    String? courseSecret, {
+  /// Apply what /auth/verify-session or a re-verify returned for [studentId].
+  ///
+  /// Updates the in-memory course, and the active fields only when [studentId]
+  /// IS the active course — verifying course B in a loop must never replace
+  /// course A's key. Returns whether it was the active course, so the caller
+  /// knows to hand the new key to the native decryptor.
+  static bool applyRefresh(
+    int studentId, {
+    String? contentKey,
+    bool accessEndsAtKnown = false,
+    String? accessEndsAt,
     bool? requireHeadphones,
+    int? seatNo,
+    String? sessionToken,
   }) {
-    if (credential != null) _activeCredential = credential;
-    if (courseSecret != null) _activeCourseSecret = courseSecret;
-    if (requireHeadphones != null) _activeRequireHeadphones = requireHeadphones;
-  }
-
-  /// Get unique device ID from native Android
-  static Future<String> _getDeviceId() async {
-    try {
-      final id = await _channel.invokeMethod<String>('getDeviceId');
-      return id ?? 'unknown';
-    } catch (_) {
-      return 'unknown';
+    final index = _courses.indexWhere((c) => c.studentId == studentId);
+    if (index >= 0) {
+      _courses[index] = _courses[index].copyWith(
+        contentKey: contentKey,
+        accessEndsAt: accessEndsAtKnown ? accessEndsAt : _unset,
+        requireHeadphones: requireHeadphones,
+        seatNo: seatNo,
+        sessionToken: sessionToken,
+      );
     }
+    if (sessionToken != null) rememberToken(studentId, sessionToken);
+    if (_loggedInStudentId != studentId) return false;
+    if (contentKey != null) _activeContentKey = contentKey;
+    if (accessEndsAtKnown) _activeAccessEndsAt = accessEndsAt;
+    if (requireHeadphones != null) _activeRequireHeadphones = requireHeadphones;
+    return true;
   }
 
   // ── Login ──────────────────────────────────────────────────────────────────
+
+  /// One POST /auth/login, shared by sign-in, add-course and re-verify.
+  ///
+  /// The password is trimmed here (the server trims too). Courses without a
+  /// well-formed `contentKey` are dropped: nothing in this build can play them.
+  static Future<LoginAttempt> requestLogin(
+    String serverCode,
+    String password, {
+    String? name,
+    bool reVerify = false,
+  }) async {
+    final strings = LocaleService.instance.strings;
+    final client = HttpClient();
+    try {
+      final deviceId = await DeviceIdentity.get();
+      client.connectionTimeout = const Duration(seconds: 10);
+
+      final request = await client.postUrl(Uri.parse('$workerUrl/auth/login'));
+      request.headers.set('Content-Type', 'application/json');
+      request.headers.set(kAppBuildHeader, '$kAppBuild');
+      request.write(
+        jsonEncode({
+          'serverCode': serverCode.trim(),
+          'password': password.trim(),
+          'platform': PlatformIdentity.current,
+          'deviceId': deviceId,
+          if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+        }),
+      );
+
+      final response = await request.close().timeout(
+        const Duration(seconds: 30),
+      );
+      final body = await response.transform(utf8.decoder).join();
+      Map<String, dynamic> data = const {};
+      try {
+        final decoded = jsonDecode(body);
+        if (decoded is Map<String, dynamic>) data = decoded;
+      } catch (_) {}
+
+      if (AppUpdateGate.isUpdateRequired(response.statusCode, data)) {
+        AppUpdateGate.report();
+        return LoginAttempt.failed(
+          LoginFailure(strings.srvAppUpdateRequired, 'APP_UPDATE_REQUIRED'),
+        );
+      }
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        final courses = <CourseSession>[];
+        final raw = data['courses'];
+        if (raw is List) {
+          for (final entry in raw) {
+            if (entry is! Map<String, dynamic>) continue;
+            try {
+              // The exact trimmed value sent above, kept for the watermark.
+              // The server never echoes it back, so it is attached here — the
+              // one place every login, add-course and re-verify passes through.
+              final course = CourseSession.fromJson(
+                entry,
+              ).copyWith(password: password.trim());
+              if (isValidContentKey(course.contentKey)) courses.add(course);
+            } catch (_) {}
+          }
+        }
+        if (courses.isEmpty) {
+          return LoginAttempt.failed(
+            LoginFailure(strings.srvInvalidRequest, 'INVALID_REQUEST'),
+          );
+        }
+        return LoginAttempt.succeeded(courses);
+      }
+
+      if (data.isEmpty) {
+        return LoginAttempt.failed(
+          LoginFailure(strings.errServerStatus(response.statusCode)),
+        );
+      }
+      final code = data['code'];
+      return LoginAttempt.failed(
+        LoginFailure(
+          localizeServerError(strings, data),
+          code is String ? code : null,
+        ),
+      );
+    } on SocketException {
+      return LoginAttempt.failed(
+        LoginFailure(
+          reVerify ? strings.errCannotConnectDialog : strings.errCannotConnect,
+        ),
+      );
+    } on TimeoutException {
+      return LoginAttempt.failed(
+        LoginFailure(
+          reVerify ? strings.errCannotConnectDialog : strings.errCannotConnect,
+        ),
+      );
+    } on HttpException {
+      return LoginAttempt.failed(LoginFailure(strings.errServerRetry));
+    } catch (e) {
+      return LoginAttempt.failed(
+        LoginFailure(strings.errConnectionFailed('$e')),
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }
 
   /// Verify student credentials using server code + password.
   ///
@@ -178,74 +379,22 @@ class AuthService {
     String password, {
     String? name,
   }) async {
-    final client = HttpClient();
-    try {
-      final deviceId = await _getDeviceId();
-      client.connectionTimeout = const Duration(seconds: 10);
+    final code = serverCode.trim();
+    final attempt = await requestLogin(code, password, name: name);
+    final courses = attempt.courses;
+    if (courses == null) return attempt.failure;
 
-      final request = await client.postUrl(Uri.parse('$workerUrl/auth/login'));
-      request.headers.set('Content-Type', 'application/json');
-      request.write(
-        jsonEncode({
-          'serverCode': serverCode.trim(),
-          'password': password,
-          'platform': PlatformIdentity.current,
-          'deviceId': deviceId,
-          if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
-        }),
-      );
-
-      // Remember the server code for later verification
-      _loggedInServerCode = serverCode.trim();
-
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
-      final data = jsonDecode(body) as Map<String, dynamic>;
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        // Parse courses list (new API) – fall back to legacy single-student
-        final rawCourses = data['courses'] as List<dynamic>?;
-        if (rawCourses != null && rawCourses.isNotEmpty) {
-          _courses = rawCourses
-              .map((c) => CourseSession.fromJson(c as Map<String, dynamic>))
-              .toList();
-        } else {
-          // Backward-compat: server returned old format
-          final s = data['student'] as Map<String, dynamic>;
-          _courses = [
-            CourseSession(
-              studentId: s['id'] as int,
-              studentName: s['name'] as String,
-              teacherId: 0,
-              teacherName: 'Course',
-              courseName: 'Course',
-            ),
-          ];
-        }
-        // Activate first course by default
-        _setActiveCourse(_courses.first);
-        // Create signed session file for offline tracking (new format — all courses)
-        await SessionService.createSession(_courses, serverCode.trim());
-        await CourseFilesService.rememberLoginCode(
-          serverCode.trim(),
-          _courses.map((c) => c.serverCode ?? serverCode.trim()),
-        );
-        return null; // success
-      } else {
-        return LoginFailure(
-          localizeServerError(LocaleService.instance.strings, data),
-          data['code'] as String?,
-        );
-      }
-    } on SocketException {
-      return LoginFailure(LocaleService.instance.strings.errCannotConnect);
-    } on HttpException {
-      return LoginFailure(LocaleService.instance.strings.errServerRetry);
-    } catch (e) {
-      return LoginFailure(LocaleService.instance.strings.errConnectionFailed('$e'));
-    } finally {
-      client.close(force: true);
-    }
+    _loggedInServerCode = code;
+    _courses = courses;
+    // Activate first course by default
+    _setActiveCourse(_courses.first);
+    // Create signed session file for offline tracking (all courses)
+    await SessionService.createSession(_courses, code);
+    await CourseFilesService.rememberLoginCode(
+      code,
+      _courses.map((c) => c.serverCode ?? code),
+    );
+    return null;
   }
 
   /// Login to add a NEW course from a different server code.
@@ -257,78 +406,28 @@ class AuthService {
     String password, {
     String? name,
   }) async {
-    final client = HttpClient();
-    try {
-      final deviceId = await _getDeviceId();
-      client.connectionTimeout = const Duration(seconds: 10);
+    final code = serverCode.trim();
+    final attempt = await requestLogin(code, password, name: name);
+    final newCourses = attempt.courses;
+    if (newCourses == null) return attempt.failure;
 
-      final request = await client.postUrl(Uri.parse('$workerUrl/auth/login'));
-      request.headers.set('Content-Type', 'application/json');
-      request.write(
-        jsonEncode({
-          'serverCode': serverCode.trim(),
-          'password': password,
-          'platform': PlatformIdentity.current,
-          'deviceId': deviceId,
-          if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
-        }),
-      );
-
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
-      final data = jsonDecode(body) as Map<String, dynamic>;
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        List<CourseSession> newCourses;
-        final rawCourses = data['courses'] as List<dynamic>?;
-        if (rawCourses != null && rawCourses.isNotEmpty) {
-          newCourses = rawCourses
-              .map((c) => CourseSession.fromJson(c as Map<String, dynamic>))
-              .toList();
-        } else {
-          final s = data['student'] as Map<String, dynamic>;
-          newCourses = [
-            CourseSession(
-              studentId: s['id'] as int,
-              studentName: s['name'] as String,
-              teacherId: 0,
-              teacherName: 'Course',
-              courseName: 'Course',
-            ),
-          ];
-        }
-
-        // Merge new courses into existing list (avoid duplicates by studentId)
-        final existingIds = _courses.map((c) => c.studentId).toSet();
-        for (final c in newCourses) {
-          if (!existingIds.contains(c.studentId)) {
-            _courses.add(c);
-            existingIds.add(c.studentId);
-          }
-        }
-
-        // Merge into session file
-        await SessionService.addCoursesToSession(newCourses, serverCode.trim());
-        await CourseFilesService.rememberLoginCode(
-          serverCode.trim(),
-          newCourses.map((c) => c.serverCode ?? serverCode.trim()),
-        );
-        return null; // success
+    // Merge new courses into existing list (a re-added course replaces the
+    // old entry, so its fresh key and token win).
+    for (final c in newCourses) {
+      final index = _courses.indexWhere((e) => e.studentId == c.studentId);
+      if (index >= 0) {
+        _courses[index] = c;
       } else {
-        return LoginFailure(
-          localizeServerError(LocaleService.instance.strings, data),
-          data['code'] as String?,
-        );
+        _courses.add(c);
       }
-    } on SocketException {
-      return LoginFailure(LocaleService.instance.strings.errCannotConnect);
-    } on HttpException {
-      return LoginFailure(LocaleService.instance.strings.errServerRetry);
-    } catch (e) {
-      return LoginFailure(LocaleService.instance.strings.errConnectionFailed('$e'));
-    } finally {
-      client.close(force: true);
     }
+
+    await SessionService.addCoursesToSession(newCourses, code);
+    await CourseFilesService.rememberLoginCode(
+      code,
+      newCourses.map((c) => c.serverCode ?? code),
+    );
+    return null;
   }
 
   // ── Session restoration ───────────────────────────────────────────────────
@@ -345,15 +444,20 @@ class AuthService {
             teacherName: sc.teacherName,
             courseName: sc.courseName,
             serverCode: sc.serverCode,
-            credential: sc.credential,
-            courseSecret: sc.courseSecret,
+            courseId: sc.courseId,
+            contentKey: sc.contentKey,
+            accessEndsAt: sc.accessEndsAt,
             requireHeadphones: sc.requireHeadphones,
+            seatNo: sc.seatNo,
             sessionToken: sc.sessionToken,
+            password: sc.password,
           ),
         )
         .toList();
     for (final sc in storedCourses) {
-      if (sc.sessionToken != null) _sessionTokens[sc.studentId] = sc.sessionToken!;
+      if (sc.sessionToken != null) {
+        _sessionTokens[sc.studentId] = sc.sessionToken!;
+      }
     }
     if (_courses.isNotEmpty) {
       _setActiveCourse(_courses.first);
@@ -368,6 +472,7 @@ class AuthService {
 
   static void _setActiveCourse(CourseSession course) {
     _loggedInStudentName = course.studentName;
+    _activePassword = course.password;
     _loggedInStudentId = course.studentId;
     // Prefer the token already in the map: /auth/verify-session refreshes it,
     // and the CourseSession object may be the older one from login.
@@ -376,10 +481,11 @@ class AuthService {
     }
     _activeSessionToken = _sessionTokens[course.studentId];
     _activeCourseTeacherId = course.teacherId;
-    // ── Security: update server code + derived-key fields on EVERY switch
+    _activeCourseId = course.courseId;
+    // ── Security: update server code + key fields on EVERY switch
     _loggedInServerCode = course.serverCode ?? _loggedInServerCode;
-    _activeCredential = course.credential;
-    _activeCourseSecret = course.courseSecret;
+    _activeContentKey = course.contentKey;
+    _activeAccessEndsAt = course.accessEndsAt;
     _activeRequireHeadphones = course.requireHeadphones;
   }
 
@@ -389,15 +495,17 @@ class AuthService {
     _sessionTokens.clear();
     _activeSessionToken = null;
     _loggedInStudentName = null;
+    _activePassword = null;
     _loggedInStudentId = null;
     _activeCourseTeacherId = null;
+    _activeCourseId = null;
     _loggedInServerCode = null;
-    _activeCredential = null;
-    _activeCourseSecret = null;
+    _activeContentKey = null;
+    _activeAccessEndsAt = null;
     _activeRequireHeadphones = false;
     _courses = [];
-    // Clear native credentials from process memory
-    AmoNativeBridge.clearCredentials();
+    // Clear the content key from native process memory
+    AmoNativeBridge.clearContentKey();
     SessionService.clearSession();
     // Clear library to prevent cross-course data leakage
     LibraryService.clearCache();

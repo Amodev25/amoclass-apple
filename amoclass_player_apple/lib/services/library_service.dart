@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import '../core/decryption_service.dart';
+import '../core/storage_platform.dart';
 import 'auth_service.dart';
 
 /// Manages the media library (encrypted videos and PDFs)
@@ -105,8 +106,18 @@ class LibraryService {
     // Ensure directory exists
     final dir = Directory(_appDataPath!);
     if (!await dir.exists()) await dir.create(recursive: true);
+    // Course content is re-downloadable and bound to this device's seat: keep
+    // it out of iCloud / Time Machine backups (everything under courses/).
+    if (serverCode != null && serverCode.isNotEmpty) {
+      await StoragePlatform.excludeFromBackup('${appDir.path}/courses');
+    }
     return _appDataPath!;
   }
+
+  /// The active course's private folder in Application Support
+  /// (`courses/<serverCode>`), where its index, imports, previews and cached
+  /// catalog live.
+  static Future<String> courseDataPath() => _getAppDataPath();
 
   static Future<String> _getLibraryPath() async {
     if (_libraryPath != null) return _libraryPath!;

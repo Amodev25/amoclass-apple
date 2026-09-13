@@ -4,6 +4,8 @@
  * MainActivity exactly, so the Dart code needs no changes.
  */
 
+#import <TargetConditionals.h>
+
 #if TARGET_OS_OSX
 #import <FlutterMacOS/FlutterMacOS.h>
 #else

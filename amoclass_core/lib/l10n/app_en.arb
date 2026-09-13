@@ -10,8 +10,6 @@
   "actionRemove": "Remove",
   "actionUnderstood": "Understood",
   "actionOk": "OK",
-  "actionYes": "Yes",
-  "actionNo": "No",
   "actionPleaseWait": "Please wait",
   "actionLoading": "Loading",
   "actionSignIn": "Sign In",
@@ -86,8 +84,6 @@
   "libraryImportNoneValid": "No valid Lockclass encrypted files found",
   "libraryPreparing": "Preparing...",
   "libraryAnotherCourse": "Another Course",
-  "libraryFocus": "Focus",
-  "libraryFocused": "Focused",
   "libraryOffline": "Offline",
   "libraryOnline": "Online",
   "libraryWatched": "WATCHED",
@@ -288,38 +284,6 @@
       }
     }
   },
-  "focusModeTitle": "Focus Mode",
-  "focusModeSubtitle": "Lock the app to stay focused",
-  "focusStudyDuration": "Study Duration",
-  "focusCustom": "Custom",
-  "focusMinutes": "Minutes",
-  "focusEmergencyDuration": "Emergency Break Duration",
-  "focusStart": "Start Focus",
-  "focusActiveTitle": "Focus Mode Active",
-  "focusActiveBody": "Time remaining: {time}\n\nDo you want to end focus mode?",
-  "@focusActiveBody": {
-    "placeholders": {
-      "time": {
-        "type": "String"
-      }
-    }
-  },
-  "focusKeepGoing": "Keep Going",
-  "focusStop": "Stop Focus",
-  "focusEmergency": "Emergency",
-  "focusEmergencyPrompt": "Start {duration} break?",
-  "@focusEmergencyPrompt": {
-    "placeholders": {
-      "duration": {
-        "type": "String"
-      }
-    }
-  },
-  "focusBackToFocus": "Back to Focus",
-  "focusBlockNotifications": "Block Notifications",
-  "focusEnableDnd": "Enable Do Not Disturb mode",
-  "focusCannotMinimize": "Cannot minimize while Focus Mode is active.",
-  "focusCannotClose": "Cannot close while Focus Mode is active. Wait for timer to end.",
   "errFileCorrupted": "File is damaged or incomplete.",
   "errFileCorruptedRetryImport": "This file is damaged or incomplete. Try importing it again.",
   "errFileCorruptedRedownload": "File is damaged — please re-download.",
@@ -423,5 +387,16 @@
   "srvAccessDenied": "Access denied",
   "srvStorageUnconfigured": "Storage not configured. Contact administrator.",
   "srvNotFound": "Not found.",
-  "srvServerError": "Internal server error."
+  "srvServerError": "Internal server error.",
+  "srvDeviceRequired": "This app could not identify your device. Update the app and try again.",
+  "srvAppUpdateRequired": "A newer version of Lockclass is required. Update the app to continue.",
+  "srvInvalidRequest": "The request could not be processed. Update the app and try again.",
+  "offlineTooLong": "You've been offline too long. Connect to the internet to keep watching.",
+  "@offlineTooLong": {
+    "description": "Shown when the student has opened lessons 3 times without the app reaching the server and tries to open another."
+  },
+  "clockChanged": "Your device's date and time look wrong. Correct them, connect to the internet, and try again.",
+  "@clockChanged": {
+    "description": "Shown when the device clock moved backwards since the app last ran, so offline limits cannot be trusted until the server is reached."
+  }
 }

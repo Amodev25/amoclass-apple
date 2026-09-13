@@ -1,7 +1,20 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/services.dart';
 
-/// Free space on the volume holding a path, so an import can refuse up front
-/// instead of failing half-way through copying a multi-gigabyte lecture.
+/// Thrown before a download starts when the volume cannot hold it.
+class InsufficientStorageException implements Exception {
+  final int neededBytes;
+  final int availableBytes;
+
+  const InsufficientStorageException(this.neededBytes, this.availableBytes);
+
+  @override
+  String toString() =>
+      'InsufficientStorageException: need $neededBytes, have $availableBytes';
+}
+
+/// Free space and backup exclusion for the folders that hold course content.
 ///
 /// Backed by the `com.lockclass/storage` channel: MainActivity.kt on Android,
 /// AmoPlatformPlugin.m on iOS and macOS.
@@ -21,5 +34,25 @@ class StoragePlatform {
     } on MissingPluginException {
       return null;
     }
+  }
+
+  static final Set<String> _excluded = {};
+
+  /// Marks the directory at [path] as excluded from iCloud backup (iOS) and
+  /// Time Machine (macOS). Everything beneath it is excluded with it.
+  ///
+  /// Lesson files are re-downloadable and tied to this device's seat, so they
+  /// must not ride along in a backup restored elsewhere. Best effort: a failure
+  /// is not a reason to refuse the download. Idempotent and cached, so it is
+  /// cheap to call every time the directory is ensured.
+  static Future<void> excludeFromBackup(String path) async {
+    if (!(Platform.isIOS || Platform.isMacOS)) return;
+    if (_excluded.contains(path)) return;
+    try {
+      final ok = await _native.invokeMethod<bool>('excludeFromBackup', {
+        'path': path,
+      });
+      if (ok == true) _excluded.add(path);
+    } catch (_) {}
   }
 }

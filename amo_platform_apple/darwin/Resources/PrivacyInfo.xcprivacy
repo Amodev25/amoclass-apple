@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Privacy manifest for the amo_platform_apple plugin (iOS + macOS).
+
+  The plugin itself sends nothing anywhere: the device id it reads is handed to
+  Dart, and the app's own manifest declares that it is collected.
+
+  Required-reason APIs used by THIS plugin's code:
+  - Disk space (E174.1): AmoPlatformPlugin.m freeBytesAtPath: reads
+    NSURLVolumeAvailableCapacityForImportantUsageKey / NSFileSystemFreeSize
+    only to check there is room before an import or download writes a file.
+  - File timestamp (C617.1): amo_stream.c calls fstat() on a lesson file inside
+    the app container, to read its size before mapping it. No timestamp is
+    read or shown, but fstat is on the listed API.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

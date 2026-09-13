@@ -41,8 +41,6 @@ class AppColors {
   static const Color pdfThumbBg = Color(0xFF1A0A0A);
 
   static const Color filesTabAccent = Color(0xFFFF7043);
-  static const Color focusGradientStart = Color(0xFFFF8F00);
-  static const Color focusGradientEnd = Color(0xFFFF6D00);
   static const Color verifyAccent = Color(0xFFFF9800);
   static const Color pausedDownload = Color(0xFFFFAA00);
 

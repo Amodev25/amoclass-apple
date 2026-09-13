@@ -6,7 +6,9 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'auth_service.dart';
 import 'library_service.dart';
+import '../core/app_update_gate.dart';
 import '../core/decryption_service.dart';
+import '../core/storage_platform.dart';
 
 /// A remote file as returned by the teacher's cloud storage.
 class RemoteFile {
@@ -129,10 +131,17 @@ class RemoteLibraryService {
     BaseOptions(connectTimeout: const Duration(seconds: 30)),
   );
 
+  /// Folder under Application Support that holds every course's downloads.
+  static const String onlineFolderName = 'AmoOnlineFiles';
+
+  /// Room kept free beyond the download itself.
+  static const int _downloadHeadroomBytes = 100 * 1024 * 1024;
+
   static Future<File> _getCatalogCacheFile() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final serverCode = AuthService.loggedInServerCode ?? 'default';
-    return File('${dir.path}/amo_catalog_$serverCode.json');
+    // Inside the course's own folder (Application Support), never Documents:
+    // on iOS Documents is visible in the Files app and backed up.
+    final dir = await LibraryService.courseDataPath();
+    return File('$dir/amo_catalog.json');
   }
 
   /// Loads the previously cached catalog, if available.
@@ -149,6 +158,41 @@ class RemoteLibraryService {
     return RemoteCatalog.empty();
   }
 
+  /// Turns a worker refusal into an [AmoServerException] with its code.
+  /// A 426 also raises the blocking update dialog; a 401 always carries
+  /// `SESSION_INVALID`, so callers send the course to re-verify.
+  static AmoServerException _refusal(int status, Map<String, dynamic>? body) {
+    final strings = LocaleService.instance.strings;
+    if (AppUpdateGate.isUpdateRequired(status, body)) {
+      AppUpdateGate.report();
+      return AmoServerException(
+        strings.srvAppUpdateRequired,
+        'APP_UPDATE_REQUIRED',
+      );
+    }
+    if (status == 401) {
+      return AmoServerException(strings.srvSessionInvalid, 'SESSION_INVALID');
+    }
+    final code = body?['code'];
+    return AmoServerException(
+      body == null
+          ? strings.errServerStatus(status)
+          : localizeServerError(strings, body),
+      code is String ? code : null,
+    );
+  }
+
+  static Map<String, dynamic>? _asMap(dynamic data) {
+    if (data is Map<String, dynamic>) return data;
+    if (data is String) {
+      try {
+        final decoded = jsonDecode(data);
+        if (decoded is Map<String, dynamic>) return decoded;
+      } catch (_) {}
+    }
+    return null;
+  }
+
   // ─── Fetch catalog ────────────────────────────────────────────────────────
 
   /// Fetches the full file listing from the server and caches it.
@@ -158,9 +202,10 @@ class RemoteLibraryService {
   static Future<RemoteCatalog> fetchCatalog() async {
     final serverCode = AuthService.loggedInServerCode;
     final workerUrl = AuthService.workerUrl;
-    final headers = AuthService.authHeaders;
 
-    if (headers.isEmpty || serverCode == null) return RemoteCatalog.empty();
+    if (AuthService.activeSessionToken == null || serverCode == null) {
+      return RemoteCatalog.empty();
+    }
 
     late final dynamic responseData;
     late final int statusCode;
@@ -170,7 +215,10 @@ class RemoteLibraryService {
         // `serverCode` still picks WHICH course; who is asking comes from the
         // token, which is why studentId is gone from the query.
         queryParameters: {'serverCode': serverCode},
-        options: Options(headers: headers, validateStatus: (_) => true),
+        options: Options(
+          headers: AuthService.workerHeaders,
+          validateStatus: (_) => true,
+        ),
       );
       statusCode = response.statusCode ?? 0;
       responseData = response.data;
@@ -179,23 +227,10 @@ class RemoteLibraryService {
     }
 
     // Dio returns a Map when Content-Type is application/json, a String otherwise.
-    Map<String, dynamic>? responseMap;
-    if (responseData is Map<String, dynamic>) {
-      responseMap = responseData;
-    } else if (responseData is String) {
-      try {
-        final decoded = jsonDecode(responseData);
-        if (decoded is Map<String, dynamic>) responseMap = decoded;
-      } catch (_) {}
-    }
+    final responseMap = _asMap(responseData);
 
     if (statusCode != 200 || responseMap?['success'] != true) {
-      throw AmoServerException(
-        responseMap == null
-            ? LocaleService.instance.strings.errServerStatus(statusCode)
-            : localizeServerError(LocaleService.instance.strings, responseMap),
-        responseMap?['code'] as String?,
-      );
+      throw _refusal(statusCode, responseMap);
     }
 
     final data = responseMap!;
@@ -221,163 +256,232 @@ class RemoteLibraryService {
   // ─── Get download URL ─────────────────────────────────────────────────────
 
   /// Requests a short-lived (15-min) presigned R2 download URL for a file.
+  ///
+  /// Returns null when signed out or on a transport failure. A refusal from
+  /// the worker throws [AmoServerException] with its code, so a download can
+  /// say why (and a 401 can send the course to re-verify).
   static Future<String?> getDownloadUrl(int fileId) async {
-    final workerUrl = AuthService.workerUrl;
-    final headers = AuthService.authHeaders;
+    if (AuthService.activeSessionToken == null) return null;
 
-    if (headers.isEmpty) return null;
-
+    final Response<dynamic> response;
     try {
-      final response = await _dio.get(
-        '$workerUrl/storage/download-url',
+      response = await _dio.get(
+        '${AuthService.workerUrl}/storage/download-url',
         // Both the student and the course come from the token. `serverCode`
         // used to be sent here and was never checked server-side, which is
         // precisely why it is not sent any more.
         queryParameters: {'fileId': fileId},
-        options: Options(headers: headers),
+        options: Options(
+          headers: AuthService.workerHeaders,
+          validateStatus: (_) => true,
+        ),
       );
-
-      if (response.statusCode == 200 && response.data['success'] == true) {
-        return response.data['downloadUrl'] as String?;
-      }
-      return null;
     } catch (_) {
       return null;
     }
+
+    final status = response.statusCode ?? 0;
+    final body = _asMap(response.data);
+    if (status == 200 && body?['success'] == true) {
+      final url = body!['downloadUrl'];
+      return url is String ? url : null;
+    }
+    if (status >= 500 || status == 0) return null;
+    throw _refusal(status, body);
+  }
+
+  // ─── Where downloads live ─────────────────────────────────────────────────
+
+  /// `<Application Support>/AmoOnlineFiles`, excluded from backup.
+  static Future<Directory> onlineRoot() async {
+    final support = await getApplicationSupportDirectory();
+    return Directory('${support.path}/$onlineFolderName');
+  }
+
+  /// `AmoOnlineFiles/<courseId>/` for the active course — never one folder
+  /// shared by every course (contract §3.8). A session restored from before
+  /// course ids existed falls back to `code_<serverCode>` until its next
+  /// verification supplies the id.
+  static Future<Directory?> _activeCourseDir({bool create = false}) async {
+    final courseId = AuthService.activeCourseId;
+    final serverCode = AuthService.loggedInServerCode;
+    final String name;
+    if (courseId != null && courseId > 0) {
+      name = '$courseId';
+    } else if (serverCode != null &&
+        RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(serverCode)) {
+      name = 'code_$serverCode';
+    } else {
+      return null;
+    }
+    final root = await onlineRoot();
+    final dir = Directory('${root.path}/$name');
+    if (create) {
+      if (!await dir.exists()) await dir.create(recursive: true);
+      await StoragePlatform.excludeFromBackup(root.path);
+    }
+    return dir;
+  }
+
+  /// Removes what iOS builds before this change left in Documents, where the
+  /// Files app showed it and iCloud backed it up: the shared download folder
+  /// and the per-code catalog caches. Downloads are fetched again on demand.
+  /// iOS only — on macOS (not sandboxed) Documents is the user's real folder.
+  static Future<void> purgeLegacyDocuments() async {
+    if (!Platform.isIOS) return;
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final legacyDownloads = Directory('${docs.path}/$onlineFolderName');
+      if (await legacyDownloads.exists()) {
+        await legacyDownloads.delete(recursive: true);
+      }
+      await for (final entity in docs.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final name = entity.uri.pathSegments.last;
+        if (name.startsWith('amo_catalog_') && name.endsWith('.json')) {
+          try {
+            await entity.delete();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
   }
 
   // ─── Check already downloaded ─────────────────────────────────────────────
 
-  /// Returns the local file path if this remote file was already downloaded, null otherwise.
+  /// Returns the local file path if this remote file was completely
+  /// downloaded, null otherwise. A partial download is not a playable file.
   static Future<String?> findLocalFile(RemoteFile file) async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final candidate = File(
-        '${dir.path}/AmoOnlineFiles/${_sanitize(file.displayName)}',
-      );
-      if (await candidate.exists()) return candidate.path;
-
-      try {
-        final extDir = await getExternalStorageDirectory();
-        if (extDir != null) {
-          final extCandidate = File(
-            '${extDir.path}/AmoOnlineFiles/${_sanitize(file.displayName)}',
-          );
-          if (await extCandidate.exists()) return extCandidate.path;
-        }
-      } catch (_) {}
-    } catch (_) {}
-    return null;
+      final dir = await _activeCourseDir();
+      if (dir == null) return null;
+      final candidate = File('${dir.path}/${_sanitize(file.displayName)}');
+      if (!await candidate.exists()) return null;
+      if (file.fileSize > 0 && await candidate.length() < file.fileSize) {
+        return null;
+      }
+      return candidate.path;
+    } catch (_) {
+      return null;
+    }
   }
 
   // ─── Download file ────────────────────────────────────────────────────────
 
   /// Downloads a remote file directly from R2 and imports it into the local library.
   /// [onProgress] callback receives values from 0.0 to 1.0.
+  ///
+  /// Throws [InsufficientStorageException] before any byte is fetched when the
+  /// volume cannot hold the rest of the file.
   static Future<String?> downloadFile({
     required RemoteFile file,
     required void Function(double progress) onProgress,
     CancelToken? cancelToken,
   }) async {
-    try {
-      // Step 1: get presigned URL
+    // Step 1: choose download path (per course)
+    final onlineDir = await _activeCourseDir(create: true);
+    if (onlineDir == null) {
+      throw Exception(LocaleService.instance.strings.errDownloadUrlFailed);
+    }
+    final destPath = '${onlineDir.path}/${_sanitize(file.displayName)}';
+    final destFile = File(destPath);
+
+    int downloadedBytes = 0;
+    if (await destFile.exists()) {
+      downloadedBytes = await destFile.length();
+    }
+
+    final complete = downloadedBytes == file.fileSize && file.fileSize > 0;
+
+    // Step 2: free space for what is still missing
+    if (!complete && file.fileSize > 0) {
+      final needed =
+          (file.fileSize - downloadedBytes).clamp(0, file.fileSize) +
+          _downloadHeadroomBytes;
+      final free = await StoragePlatform.freeBytes(onlineDir.path);
+      if (free != null && free < needed) {
+        throw InsufficientStorageException(needed, free);
+      }
+    }
+
+    if (complete) {
+      onProgress(1.0);
+    } else {
+      // Step 3: presigned URL, then download with progress and resume
       final url = await getDownloadUrl(file.id);
       if (url == null) {
         throw Exception(LocaleService.instance.strings.errDownloadUrlFailed);
       }
 
-      // Step 2: choose download path
-      final dir = await getApplicationDocumentsDirectory();
-      final onlineDir = Directory('${dir.path}/AmoOnlineFiles');
-      if (!await onlineDir.exists()) {
-        await onlineDir.create(recursive: true);
-      }
-      final destPath = '${onlineDir.path}/${_sanitize(file.displayName)}';
-      final destFile = File(destPath);
+      final response = await _dio.get<ResponseBody>(
+        url,
+        cancelToken: cancelToken,
+        options: Options(
+          responseType: ResponseType.stream,
+          receiveTimeout: const Duration(minutes: 30),
+          headers: downloadedBytes > 0
+              ? {'Range': 'bytes=$downloadedBytes-'}
+              : {},
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
 
-      int downloadedBytes = 0;
-      if (await destFile.exists()) {
-        downloadedBytes = await destFile.length();
-      }
-
-      if (downloadedBytes == file.fileSize && file.fileSize > 0) {
+      if (response.statusCode == 416) {
         onProgress(1.0);
+      } else if (response.statusCode == 200 || response.statusCode == 206) {
+        final totalBytesStr =
+            response.headers.value(Headers.contentLengthHeader) ?? '0';
+        int lengthFromHeader = int.tryParse(totalBytesStr) ?? 0;
+
+        // If server returns full file (200) instead of partial (206), start over
+        if (response.statusCode == 200) {
+          downloadedBytes = 0;
+        }
+
+        final totalExpectedBytes = lengthFromHeader + downloadedBytes;
+
+        final raf = destFile.openSync(
+          mode: downloadedBytes > 0 ? FileMode.append : FileMode.write,
+        );
+        int received = downloadedBytes;
+
+        try {
+          await for (var chunk in response.data!.stream) {
+            raf.writeFromSync(chunk);
+            received += chunk.length;
+            if (totalExpectedBytes > 0) {
+              onProgress(received / totalExpectedBytes);
+            }
+          }
+        } finally {
+          raf.closeSync();
+        }
       } else {
-        // Step 3: download with progress and resumable support
-        final response = await _dio.get<ResponseBody>(
-          url,
-          cancelToken: cancelToken,
-          options: Options(
-            responseType: ResponseType.stream,
-            receiveTimeout: const Duration(minutes: 30),
-            headers: downloadedBytes > 0
-                ? {'Range': 'bytes=$downloadedBytes-'}
-                : {},
-            validateStatus: (status) => status != null && status < 500,
+        throw Exception(
+          LocaleService.instance.strings.errDownloadHttp(
+            response.statusCode ?? 0,
           ),
         );
-
-        if (response.statusCode == 416) {
-          onProgress(1.0);
-        } else if (response.statusCode == 200 || response.statusCode == 206) {
-          final totalBytesStr =
-              response.headers.value(Headers.contentLengthHeader) ?? '0';
-          int lengthFromHeader = int.tryParse(totalBytesStr) ?? 0;
-
-          // If server returns full file (200) instead of partial (206), discard existing logic
-          if (response.statusCode == 200) {
-            downloadedBytes = 0;
-          }
-
-          final totalExpectedBytes = lengthFromHeader + downloadedBytes;
-
-          final raf = destFile.openSync(
-            mode: downloadedBytes > 0 ? FileMode.append : FileMode.write,
-          );
-          int received = downloadedBytes;
-
-          try {
-            await for (var chunk in response.data!.stream) {
-              raf.writeFromSync(chunk);
-              received += chunk.length;
-              if (totalExpectedBytes > 0) {
-                onProgress(received / totalExpectedBytes);
-              }
-            }
-          } finally {
-            raf.closeSync();
-          }
-        } else {
-          throw Exception(
-            LocaleService.instance.strings.errDownloadHttp(
-              response.statusCode ?? 0,
-            ),
-          );
-        }
       }
-
-      // Step 4: Security check - ensure it's for the correct course
-      try {
-        final header = await DecryptionService.parseHeader(destFile.path);
-        if (header != null &&
-            header.serverCode != null &&
-            header.serverCode!.isNotEmpty) {
-          final myCode = AuthService.loggedInServerCode;
-          if (myCode == null || myCode != header.serverCode) {
-            throw Exception(
-              LocaleService.instance.strings.errWrongCourseContent,
-            );
-          }
-        }
-      } catch (e) {
-        await destFile.delete().catchError((_) => destFile);
-        throw Exception(LocaleService.instance.strings.errWrongCourseContent);
-      }
-
-      return destFile.path;
-    } catch (e) {
-      rethrow;
     }
+
+    // Step 4: Security check - ensure it's for the correct course
+    try {
+      final header = await DecryptionService.parseHeader(destFile.path);
+      if (header != null &&
+          header.serverCode != null &&
+          header.serverCode!.isNotEmpty) {
+        final myCode = AuthService.loggedInServerCode;
+        if (myCode == null || myCode != header.serverCode) {
+          throw Exception(LocaleService.instance.strings.errWrongCourseContent);
+        }
+      }
+    } catch (e) {
+      await destFile.delete().catchError((_) => destFile);
+      throw Exception(LocaleService.instance.strings.errWrongCourseContent);
+    }
+
+    return destFile.path;
   }
 
   // ─── Thumbnail preview (online tab) ───────────────────────────────────────
@@ -425,15 +529,17 @@ class RemoteLibraryService {
 
   /// The encrypted prefix that holds the thumbnail. Null means the file has no
   /// preview. A transient failure throws, so it is not remembered as "none".
+  /// A 401 is only a failed preview here; the session checks handle it.
   static Future<Uint8List?> _fetchPreviewBytes(RemoteFile file) async {
     if (_thumbnailRoute != false) {
-      final headers = AuthService.authHeaders;
-      if (headers.isEmpty) throw StateError('not signed in');
+      if (AuthService.activeSessionToken == null) {
+        throw StateError('not signed in');
+      }
       final response = await _dio.get<List<int>>(
         '${AuthService.workerUrl}/storage/thumbnail',
         queryParameters: {'fileId': file.id},
         options: Options(
-          headers: headers,
+          headers: AuthService.workerHeaders,
           responseType: ResponseType.bytes,
           validateStatus: (status) => status != null,
         ),
@@ -446,6 +552,10 @@ class RemoteLibraryService {
       if (status == 204) {
         _thumbnailRoute = true;
         return null;
+      }
+      if (status == 426) {
+        AppUpdateGate.report();
+        throw StateError('app update required');
       }
       if (status != 404) {
         throw StateError('thumbnail request failed: $status');
@@ -481,19 +591,10 @@ class RemoteLibraryService {
 
   static Future<int> getLocalFileSize(String displayName) async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final file = File('${dir.path}/AmoOnlineFiles/${_sanitize(displayName)}');
-      if (await file.exists()) {
-        return await file.length();
-      }
-
-      final extDir = await getExternalStorageDirectory();
-      if (extDir != null) {
-        final extFile = File(
-          '${extDir.path}/AmoOnlineFiles/${_sanitize(displayName)}',
-        );
-        if (await extFile.exists()) return await extFile.length();
-      }
+      final dir = await _activeCourseDir();
+      if (dir == null) return 0;
+      final file = File('${dir.path}/${_sanitize(displayName)}');
+      if (await file.exists()) return await file.length();
     } catch (_) {}
     return 0;
   }

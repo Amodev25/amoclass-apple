@@ -30,12 +30,6 @@ class AmoL10nAr extends AmoL10n {
   String get actionOk => 'حسناً';
 
   @override
-  String get actionYes => 'نعم';
-
-  @override
-  String get actionNo => 'لا';
-
-  @override
   String get actionPleaseWait => 'انتظر من فضلك';
 
   @override
@@ -174,12 +168,6 @@ class AmoL10nAr extends AmoL10n {
 
   @override
   String get libraryAnotherCourse => 'كورس آخر';
-
-  @override
-  String get libraryFocus => 'التركيز';
-
-  @override
-  String get libraryFocused => 'في وضع التركيز';
 
   @override
   String get libraryOffline => 'دون اتصال';
@@ -476,65 +464,6 @@ class AmoL10nAr extends AmoL10n {
   }
 
   @override
-  String get focusModeTitle => 'وضع التركيز';
-
-  @override
-  String get focusModeSubtitle => 'اقفل التطبيق لتبقى مركّزاً';
-
-  @override
-  String get focusStudyDuration => 'مدة المذاكرة';
-
-  @override
-  String get focusCustom => 'مخصص';
-
-  @override
-  String get focusMinutes => 'دقائق';
-
-  @override
-  String get focusEmergencyDuration => 'مدة الاستراحة الطارئة';
-
-  @override
-  String get focusStart => 'ابدأ التركيز';
-
-  @override
-  String get focusActiveTitle => 'وضع التركيز نشط';
-
-  @override
-  String focusActiveBody(String time) {
-    return 'الوقت المتبقي: $time\n\nهل تريد إنهاء وضع التركيز؟';
-  }
-
-  @override
-  String get focusKeepGoing => 'أكمل';
-
-  @override
-  String get focusStop => 'أوقف التركيز';
-
-  @override
-  String get focusEmergency => 'طوارئ';
-
-  @override
-  String focusEmergencyPrompt(String duration) {
-    return 'تبدأ استراحة $duration؟';
-  }
-
-  @override
-  String get focusBackToFocus => 'ارجع إلى التركيز';
-
-  @override
-  String get focusBlockNotifications => 'حظر الإشعارات';
-
-  @override
-  String get focusEnableDnd => 'تفعيل وضع عدم الإزعاج';
-
-  @override
-  String get focusCannotMinimize => 'لا يمكن تصغير النافذة أثناء وضع التركيز.';
-
-  @override
-  String get focusCannotClose =>
-      'لا يمكن الإغلاق أثناء وضع التركيز. انتظر انتهاء المؤقت.';
-
-  @override
   String get errFileCorrupted => 'الملف تالف أو غير مكتمل.';
 
   @override
@@ -727,4 +656,24 @@ class AmoL10nAr extends AmoL10n {
 
   @override
   String get srvServerError => 'خطأ داخلي في الخادم.';
+
+  @override
+  String get srvDeviceRequired =>
+      'تعذّر على التطبيق التعرّف على جهازك. حدّث التطبيق ثم حاول مرة أخرى.';
+
+  @override
+  String get srvAppUpdateRequired =>
+      'يلزم إصدار أحدث من لوك كلاس. حدّث التطبيق للمتابعة.';
+
+  @override
+  String get srvInvalidRequest =>
+      'تعذّرت معالجة الطلب. حدّث التطبيق ثم حاول مرة أخرى.';
+
+  @override
+  String get offlineTooLong =>
+      'مرّ وقت طويل دون اتصال. اتصل بالإنترنت لمتابعة المشاهدة.';
+
+  @override
+  String get clockChanged =>
+      'تاريخ جهازك ووقته يبدوان غير صحيحين. صحّحهما واتصل بالإنترنت ثم حاول مرة أخرى.';
 }

@@ -16,3 +16,4 @@ export 'widgets/language_toggle.dart';
 export 'core/thumbnail_store.dart';
 export 'widgets/async_thumbnail.dart';
 export 'widgets/lock_mark.dart';
+export 'widgets/student_watermark.dart';

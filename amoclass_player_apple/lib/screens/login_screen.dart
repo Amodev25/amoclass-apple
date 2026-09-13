@@ -95,14 +95,14 @@ class _LoginScreenState extends State<LoginScreen>
       // Adding a new course: merge into existing session
       failure = await AuthService.addCourseLogin(
         _serverCodeController.text.trim(),
-        _passwordController.text,
+        _passwordController.text.trim(),
         name: nameToSend,
       );
     } else {
       // Initial login: create fresh session
       failure = await AuthService.login(
         _serverCodeController.text.trim(),
-        _passwordController.text,
+        _passwordController.text.trim(),
         name: nameToSend,
       );
     }

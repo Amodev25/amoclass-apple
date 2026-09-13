@@ -59,6 +59,12 @@ String localizeServerError(AmoL10n l10n, Map<String, dynamic> data) {
       return l10n.srvNotFound;
     case 'SERVER_ERROR':
       return l10n.srvServerError;
+    case 'DEVICE_REQUIRED':
+      return l10n.srvDeviceRequired;
+    case 'APP_UPDATE_REQUIRED':
+      return l10n.srvAppUpdateRequired;
+    case 'INVALID_REQUEST':
+      return l10n.srvInvalidRequest;
   }
   final fallback = data['error'];
   if (fallback is String && fallback.isNotEmpty) return fallback;

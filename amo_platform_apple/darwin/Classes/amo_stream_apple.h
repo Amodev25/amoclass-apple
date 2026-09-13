@@ -26,11 +26,18 @@ extern "C" {
  */
 int amo_register_protocol(int64_t mpv_handle);
 
-/** Set credentials for v2 key derivation. Call before playback. */
-void amo_apple_set_credentials(const char *credential, const char *course_secret);
+/**
+ * Store the course content key: exactly 64 hex digits, computed by the server.
+ * Call before playback.
+ *
+ * Returns 1 when the key was stored, 0 when `hex` is NULL or malformed — in
+ * which case any previously stored key is cleared too, so a failed set can
+ * never leave the previous course's key behind.
+ */
+int amo_apple_set_content_key(const char *hex);
 
-/** Clear credentials from native memory. Call on logout / course switch. */
-void amo_apple_clear_credentials(void);
+/** Clear the content key from native memory. Call on logout / course switch. */
+void amo_apple_clear_content_key(void);
 
 #ifdef __cplusplus
 }

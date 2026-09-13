@@ -6,7 +6,6 @@ import '../core/decryption_service.dart';
 import '../core/amo_native_bridge.dart';
 import 'library_screen.dart';
 import 'login_screen.dart';
-import 're_verify_screen.dart';
 import 'package:amo_core/amo_core.dart';
 
 /// Always shown when the app opens with a valid session.
@@ -64,59 +63,33 @@ class _CourseSelectScreenState extends State<CourseSelectScreen>
       _verifyingIndex = null;
     });
 
-    switch (check.result) {
-      case SessionResult.ok:
-        // Restore auth + switch to this course
-        AuthService.restoreFromSession(check.storedCourses);
-        final courseSession = AuthService.courses.firstWhere(
-          (c) => c.studentId == storedCourse.studentId,
-          orElse: () => AuthService.courses.first,
-        );
-        AuthService.switchCourse(courseSession);
-        // Pass credentials to native bridge for in-process decryption
-        if (AuthService.activeCredential != null &&
-            AuthService.activeCourseSecret != null) {
-          AmoNativeBridge.setCredentials(
-            AuthService.activeCredential!,
-            AuthService.activeCourseSecret!,
-          );
-        }
-        // Clear library cache + temp files for clean course isolation
-        LibraryService.clearCache();
-        DecryptionService.cleanupTempFiles();
+    // Re-verify, forced logout, or the update dialog (already shown).
+    if (!SessionService.handleCheck(context, check)) return;
 
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (_, _, _) => const LibraryScreen(),
-            transitionsBuilder: (_, anim, _, child) =>
-                FadeTransition(opacity: anim, child: child),
-            transitionDuration: const Duration(milliseconds: 350),
-          ),
-        );
-        break;
+    // Restore auth + switch to this course
+    AuthService.restoreFromSession(check.storedCourses);
+    final courseSession = AuthService.courses.firstWhere(
+      (c) => c.studentId == storedCourse.studentId,
+      orElse: () => AuthService.courses.first,
+    );
+    AuthService.switchCourse(courseSession);
+    // Hand the course content key to the native decryptor. Playback checks
+    // the result again before opening a video.
+    await AmoNativeBridge.setContentKey(AuthService.activeContentKey ?? '');
+    // Clear library cache + temp files for clean course isolation
+    LibraryService.clearCache();
+    DecryptionService.cleanupTempFiles();
 
-      case SessionResult.needsReVerify:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ReVerifyScreen(courses: check.storedCourses),
-          ),
-        );
-        break;
-
-      case SessionResult.needsFullLogin:
-        SessionService.showForceLogout(context, 'session_expired');
-        break;
-
-      case SessionResult.blocked:
-        SessionService.showForceLogout(
-          context,
-          check.blockedReason ?? 'invalid',
-          serverCode: check.blockedServerCode,
-        );
-        break;
-    }
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) => const LibraryScreen(),
+        transitionsBuilder: (_, anim, _, child) =>
+            FadeTransition(opacity: anim, child: child),
+        transitionDuration: const Duration(milliseconds: 350),
+      ),
+    );
   }
 
   void _addAnotherCourse() {

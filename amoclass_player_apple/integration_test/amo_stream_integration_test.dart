@@ -15,10 +15,18 @@ import 'package:amo_core/core/constants.dart';
 import 'package:amo_player_apple/core/amo_native_bridge.dart';
 import 'package:amo_player_apple/core/decryption_service.dart';
 
-/// The fixture and the native decryptor must derive the same course key, so the
-/// credentials handed to the C side have to be exactly these.
+/// Test-only inputs for the course key. The server computes
+/// HMAC-SHA256(credential, course_secret) and sends the app only the result
+/// (the content key); the fixture derives it the same way, so the key handed
+/// to the C side must be exactly [kContentKeyHex].
 const kCredential = 'test_user';
 const kCourseSecret = 'test_secret';
+
+/// The content key as the worker would send it: 64 hex digits.
+final String kContentKeyHex = crypto.Hmac(
+  crypto.sha256,
+  utf8.encode(kCredential),
+).convert(utf8.encode(kCourseSecret)).toString();
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -134,8 +142,11 @@ void main() {
   testWidgets(
     '1- Verify Applied Plan & 2- Seeking Forward/Backward & 3- Security clearing',
     (tester) async {
-      // 3. Security of Data - Setting credentials
-      await AmoNativeBridge.setCredentials(kCredential, kCourseSecret);
+      // 3. Security of Data - Setting the content key (must be accepted)
+      expect(await AmoNativeBridge.setContentKey(kContentKeyHex), isTrue);
+      // A malformed key is refused, never half-applied.
+      expect(await AmoNativeBridge.setContentKey('not-hex'), isFalse);
+      expect(await AmoNativeBridge.setContentKey(kContentKeyHex), isTrue);
 
       // Register the custom protocol
       final regResult = await AmoNativeBridge.registerProtocol(player);
@@ -198,8 +209,8 @@ void main() {
       final finalPos = player.state.position;
       expect(finalPos.inSeconds, lessThanOrEqualTo(pausedPos.inSeconds - 1));
 
-      // 3. Security of Data - Clearing credentials correctly
-      await AmoNativeBridge.clearCredentials();
+      // 3. Security of Data - Clearing the content key correctly
+      await AmoNativeBridge.clearContentKey();
       expect(
         true,
         true,

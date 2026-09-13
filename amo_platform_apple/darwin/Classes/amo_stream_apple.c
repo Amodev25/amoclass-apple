@@ -86,11 +86,15 @@ int amo_register_protocol(int64_t mpv_handle) {
     return 0;
 }
 
-void amo_apple_set_credentials(const char *credential, const char *course_secret) {
-    if (!credential || !course_secret) return;
-    amo_set_credentials(credential, course_secret);
+int amo_apple_set_content_key(const char *hex) {
+    if (!hex) {
+        /* Same contract as a malformed key: nothing stale survives a failed set. */
+        amo_clear_content_key();
+        return 0;
+    }
+    return amo_set_content_key(hex) == 1 ? 1 : 0;
 }
 
-void amo_apple_clear_credentials(void) {
-    amo_clear_credentials();
+void amo_apple_clear_content_key(void) {
+    amo_clear_content_key();
 }

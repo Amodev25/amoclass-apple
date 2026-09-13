@@ -34,21 +34,34 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
+	<!-- iPhone only (owner decision 2026-09-13; TARGETED_DEVICE_FAMILY = 1),
+	     so there is no UISupportedInterfaceOrientations~ipad. -->
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Course content is not exposed in the Files app. Everything the app
+	     stores lives in Application Support, excluded from backup; Documents
+	     holds nothing of ours. -->
 	<key>UIFileSharingEnabled</key>
-	<true/>
+	<false/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<true/>
+	<false/>
+	<!-- Export compliance. Basis for "no non-exempt encryption": the app itself
+	     implements no encryption for data protection. Network traffic uses
+	     the operating system's HTTPS (exempt), and the AES decryption of
+	     lesson files serves copy protection of copyrighted content only, which
+	     is excluded from Category 5 Part 2 (EAR Cat. 5 Pt. 2 Note 4 /
+	     the Apple export-compliance exemption for copy protection).
+	     OWNER MUST CONFIRM this classification before any App Store
+	     submission; if it is not accepted, set this to true and complete the
+	     export compliance questions in App Store Connect. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<!-- The import picker can offer the photo library. Lockclass reads only
+	     the file the student picks there, and uploads nothing. -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Lockclass opens your photo library only when you choose to import a lesson file from it. It reads just the file you pick and uploads nothing.</string>
 	<!-- No UTExportedTypeDeclarations and no CFBundleDocumentTypes on
 	     purpose. A lesson container is identified by its magic bytes
 	     ("AMOENC01"), not by its filename, and the teacher chooses the

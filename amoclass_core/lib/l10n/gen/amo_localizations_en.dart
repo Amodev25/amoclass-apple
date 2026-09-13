@@ -30,12 +30,6 @@ class AmoL10nEn extends AmoL10n {
   String get actionOk => 'OK';
 
   @override
-  String get actionYes => 'Yes';
-
-  @override
-  String get actionNo => 'No';
-
-  @override
   String get actionPleaseWait => 'Please wait';
 
   @override
@@ -178,12 +172,6 @@ class AmoL10nEn extends AmoL10n {
 
   @override
   String get libraryAnotherCourse => 'Another Course';
-
-  @override
-  String get libraryFocus => 'Focus';
-
-  @override
-  String get libraryFocused => 'Focused';
 
   @override
   String get libraryOffline => 'Offline';
@@ -459,66 +447,6 @@ class AmoL10nEn extends AmoL10n {
   }
 
   @override
-  String get focusModeTitle => 'Focus Mode';
-
-  @override
-  String get focusModeSubtitle => 'Lock the app to stay focused';
-
-  @override
-  String get focusStudyDuration => 'Study Duration';
-
-  @override
-  String get focusCustom => 'Custom';
-
-  @override
-  String get focusMinutes => 'Minutes';
-
-  @override
-  String get focusEmergencyDuration => 'Emergency Break Duration';
-
-  @override
-  String get focusStart => 'Start Focus';
-
-  @override
-  String get focusActiveTitle => 'Focus Mode Active';
-
-  @override
-  String focusActiveBody(String time) {
-    return 'Time remaining: $time\n\nDo you want to end focus mode?';
-  }
-
-  @override
-  String get focusKeepGoing => 'Keep Going';
-
-  @override
-  String get focusStop => 'Stop Focus';
-
-  @override
-  String get focusEmergency => 'Emergency';
-
-  @override
-  String focusEmergencyPrompt(String duration) {
-    return 'Start $duration break?';
-  }
-
-  @override
-  String get focusBackToFocus => 'Back to Focus';
-
-  @override
-  String get focusBlockNotifications => 'Block Notifications';
-
-  @override
-  String get focusEnableDnd => 'Enable Do Not Disturb mode';
-
-  @override
-  String get focusCannotMinimize =>
-      'Cannot minimize while Focus Mode is active.';
-
-  @override
-  String get focusCannotClose =>
-      'Cannot close while Focus Mode is active. Wait for timer to end.';
-
-  @override
   String get errFileCorrupted => 'File is damaged or incomplete.';
 
   @override
@@ -722,4 +650,24 @@ class AmoL10nEn extends AmoL10n {
 
   @override
   String get srvServerError => 'Internal server error.';
+
+  @override
+  String get srvDeviceRequired =>
+      'This app could not identify your device. Update the app and try again.';
+
+  @override
+  String get srvAppUpdateRequired =>
+      'A newer version of Lockclass is required. Update the app to continue.';
+
+  @override
+  String get srvInvalidRequest =>
+      'The request could not be processed. Update the app and try again.';
+
+  @override
+  String get offlineTooLong =>
+      'You\'ve been offline too long. Connect to the internet to keep watching.';
+
+  @override
+  String get clockChanged =>
+      'Your device\'s date and time look wrong. Correct them, connect to the internet, and try again.';
 }

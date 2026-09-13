@@ -2,17 +2,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
+import 'core/app_update_gate.dart';
 import 'core/platform_ui.dart';
 import 'services/session_service.dart';
 import 'services/auth_service.dart';
 import 'services/progress_service.dart';
+import 'services/remote_library_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/course_select_screen.dart';
 import 'screens/re_verify_screen.dart';
 import 'core/anti_capture.dart';
 import 'core/decryption_service.dart';
-import 'widgets/focus_mode_widgets.dart';
 import 'package:amo_core/amo_core.dart';
 
 void main() async {
@@ -60,12 +61,29 @@ void main() async {
 
   await ProgressService.init();
 
+  // iOS builds before the storage move kept downloads and catalog caches in
+  // Documents (visible in the Files app, backed up to iCloud). Remove them.
+  await RemoteLibraryService.purgeLegacyDocuments();
+
   // Enable anti-screen capture BEFORE the first frame so there is no
-  // unprotected window at launch.
-  await AntiCapture.enableProtection();
+  // unprotected window at launch. The shield text shown over a recording on
+  // iOS comes from here, so it follows the app language.
+  await _enableCaptureProtection();
 
   runApp(const AmoPlayerApp());
+
+  // The window may not exist yet on the first call (macOS) and the capture
+  // state must be read once the scene is up (iOS): apply again after the
+  // first frame, and again whenever the language changes.
+  WidgetsBinding.instance.addPostFrameCallback(
+    (_) => _enableCaptureProtection(),
+  );
+  LocaleService.instance.addListener(_enableCaptureProtection);
 }
+
+Future<void> _enableCaptureProtection() => AntiCapture.enableProtection(
+  message: LocaleService.instance.strings.playerScreenRecordingBlocked,
+);
 
 class AmoPlayerApp extends StatelessWidget {
   const AmoPlayerApp({super.key});
@@ -80,6 +98,7 @@ class AmoPlayerApp extends StatelessWidget {
 
   Widget _app(BuildContext context) {
     return MaterialApp(
+      navigatorKey: AppUpdateGate.navigatorKey,
       title: 'Lockclass',
       debugShowCheckedModeBanner: false,
       locale: LocaleService.instance.locale,
@@ -102,17 +121,6 @@ class AmoPlayerApp extends StatelessWidget {
         // face lands (see GLOSSARY-AR.md / pubspec fonts:).
       ),
       home: const SplashGate(),
-      builder: (context, child) {
-        return Stack(
-          children: [
-            child!,
-            const Align(
-              alignment: Alignment.bottomCenter,
-              child: FocusModeOverlay(),
-            ),
-          ],
-        );
-      },
     );
   }
 }
@@ -160,7 +168,12 @@ class _SplashGateState extends State<SplashGate> {
         break;
       case SessionResult.needsReVerify:
         AuthService.restoreFromSession(check.storedCourses);
-        _navigateTo(ReVerifyScreen(courses: check.storedCourses));
+        _navigateTo(
+          ReVerifyScreen(courses: check.storedCourses, notice: check.notice),
+        );
+        break;
+      case SessionResult.updateRequired:
+        // The blocking update dialog is already up; stay on the splash.
         break;
       case SessionResult.ok:
         AuthService.restoreFromSession(check.storedCourses);

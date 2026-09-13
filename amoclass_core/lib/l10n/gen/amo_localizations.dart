@@ -139,18 +139,6 @@ abstract class AmoL10n {
   /// **'OK'**
   String get actionOk;
 
-  /// No description provided for @actionYes.
-  ///
-  /// In en, this message translates to:
-  /// **'Yes'**
-  String get actionYes;
-
-  /// No description provided for @actionNo.
-  ///
-  /// In en, this message translates to:
-  /// **'No'**
-  String get actionNo;
-
   /// No description provided for @actionPleaseWait.
   ///
   /// In en, this message translates to:
@@ -408,18 +396,6 @@ abstract class AmoL10n {
   /// In en, this message translates to:
   /// **'Another Course'**
   String get libraryAnotherCourse;
-
-  /// No description provided for @libraryFocus.
-  ///
-  /// In en, this message translates to:
-  /// **'Focus'**
-  String get libraryFocus;
-
-  /// No description provided for @libraryFocused.
-  ///
-  /// In en, this message translates to:
-  /// **'Focused'**
-  String get libraryFocused;
 
   /// No description provided for @libraryOffline.
   ///
@@ -793,114 +769,6 @@ abstract class AmoL10n {
   /// **'Course by {teacher} · {student}'**
   String verifyCourseBy(String teacher, String student);
 
-  /// No description provided for @focusModeTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Focus Mode'**
-  String get focusModeTitle;
-
-  /// No description provided for @focusModeSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Lock the app to stay focused'**
-  String get focusModeSubtitle;
-
-  /// No description provided for @focusStudyDuration.
-  ///
-  /// In en, this message translates to:
-  /// **'Study Duration'**
-  String get focusStudyDuration;
-
-  /// No description provided for @focusCustom.
-  ///
-  /// In en, this message translates to:
-  /// **'Custom'**
-  String get focusCustom;
-
-  /// No description provided for @focusMinutes.
-  ///
-  /// In en, this message translates to:
-  /// **'Minutes'**
-  String get focusMinutes;
-
-  /// No description provided for @focusEmergencyDuration.
-  ///
-  /// In en, this message translates to:
-  /// **'Emergency Break Duration'**
-  String get focusEmergencyDuration;
-
-  /// No description provided for @focusStart.
-  ///
-  /// In en, this message translates to:
-  /// **'Start Focus'**
-  String get focusStart;
-
-  /// No description provided for @focusActiveTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Focus Mode Active'**
-  String get focusActiveTitle;
-
-  /// No description provided for @focusActiveBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Time remaining: {time}\n\nDo you want to end focus mode?'**
-  String focusActiveBody(String time);
-
-  /// No description provided for @focusKeepGoing.
-  ///
-  /// In en, this message translates to:
-  /// **'Keep Going'**
-  String get focusKeepGoing;
-
-  /// No description provided for @focusStop.
-  ///
-  /// In en, this message translates to:
-  /// **'Stop Focus'**
-  String get focusStop;
-
-  /// No description provided for @focusEmergency.
-  ///
-  /// In en, this message translates to:
-  /// **'Emergency'**
-  String get focusEmergency;
-
-  /// No description provided for @focusEmergencyPrompt.
-  ///
-  /// In en, this message translates to:
-  /// **'Start {duration} break?'**
-  String focusEmergencyPrompt(String duration);
-
-  /// No description provided for @focusBackToFocus.
-  ///
-  /// In en, this message translates to:
-  /// **'Back to Focus'**
-  String get focusBackToFocus;
-
-  /// No description provided for @focusBlockNotifications.
-  ///
-  /// In en, this message translates to:
-  /// **'Block Notifications'**
-  String get focusBlockNotifications;
-
-  /// No description provided for @focusEnableDnd.
-  ///
-  /// In en, this message translates to:
-  /// **'Enable Do Not Disturb mode'**
-  String get focusEnableDnd;
-
-  /// No description provided for @focusCannotMinimize.
-  ///
-  /// In en, this message translates to:
-  /// **'Cannot minimize while Focus Mode is active.'**
-  String get focusCannotMinimize;
-
-  /// No description provided for @focusCannotClose.
-  ///
-  /// In en, this message translates to:
-  /// **'Cannot close while Focus Mode is active. Wait for timer to end.'**
-  String get focusCannotClose;
-
   /// No description provided for @errFileCorrupted.
   ///
   /// In en, this message translates to:
@@ -1236,6 +1104,36 @@ abstract class AmoL10n {
   /// In en, this message translates to:
   /// **'Internal server error.'**
   String get srvServerError;
+
+  /// No description provided for @srvDeviceRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'This app could not identify your device. Update the app and try again.'**
+  String get srvDeviceRequired;
+
+  /// No description provided for @srvAppUpdateRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'A newer version of Lockclass is required. Update the app to continue.'**
+  String get srvAppUpdateRequired;
+
+  /// No description provided for @srvInvalidRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'The request could not be processed. Update the app and try again.'**
+  String get srvInvalidRequest;
+
+  /// Shown when the student has opened lessons 3 times without the app reaching the server and tries to open another.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve been offline too long. Connect to the internet to keep watching.'**
+  String get offlineTooLong;
+
+  /// Shown when the device clock moved backwards since the app last ran, so offline limits cannot be trusted until the server is reached.
+  ///
+  /// In en, this message translates to:
+  /// **'Your device\'s date and time look wrong. Correct them, connect to the internet, and try again.'**
+  String get clockChanged;
 }
 
 class _AmoL10nDelegate extends LocalizationsDelegate<AmoL10n> {

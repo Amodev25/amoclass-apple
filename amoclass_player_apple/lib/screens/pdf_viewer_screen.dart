@@ -1,7 +1,8 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../core/decryption_service.dart';
+import '../services/auth_service.dart';
 import 'package:amo_core/amo_core.dart';
 
 class PdfViewerScreen extends StatefulWidget {
@@ -16,7 +17,10 @@ class PdfViewerScreen extends StatefulWidget {
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   bool _isDecrypting = true;
   String? _errorMessage;
-  String? _tempPdfPath;
+
+  /// The decrypted document. Held in memory only — nothing decrypted is ever
+  /// written to disk — and zeroed when the screen closes.
+  Uint8List? _pdfBytes;
 
   final PdfViewerController _pdfViewerController = PdfViewerController();
 
@@ -29,17 +33,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   @override
   void dispose() {
     _pdfViewerController.dispose();
-    _cleanupTempFile();
+    _releaseBytes();
     super.dispose();
   }
 
-  Future<void> _cleanupTempFile() async {
-    if (_tempPdfPath != null) {
-      try {
-        final f = File(_tempPdfPath!);
-        if (await f.exists()) await f.delete();
-      } catch (_) {}
-    }
+  void _releaseBytes() {
+    final bytes = _pdfBytes;
+    _pdfBytes = null;
+    if (bytes != null) DecryptionService.wipe(bytes);
   }
 
   Future<void> _decryptAndLoad() async {
@@ -63,16 +64,22 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         return;
       }
 
-      final tempPath = await DecryptionService.decryptToTempFile(
+      final bytes = await DecryptionService.decryptToMemory(
         widget.document.filePath,
         header,
       );
 
-      if (mounted) {
-        setState(() {
-          _tempPdfPath = tempPath;
-          _isDecrypting = false;
-        });
+      if (!mounted) {
+        DecryptionService.wipe(bytes);
+        return;
+      }
+      final previous = _pdfBytes;
+      setState(() {
+        _pdfBytes = bytes;
+        _isDecrypting = false;
+      });
+      if (previous != null && !identical(previous, bytes)) {
+        DecryptionService.wipe(previous);
       }
     } on AmoWrongCourseException {
       _setError(l10n.errWrongCourseSwitch);
@@ -145,23 +152,45 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         ],
       ),
       body: SafeArea(
-        child: Column(children: [Expanded(child: _buildBody())]),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Column(children: [Expanded(child: _buildBody())]),
+            // Student name + password watermark (owner decision 2026-09-14),
+            // LAST so the document never draws over it.
+            ?_buildWatermark(),
+          ],
+        ),
       ),
     );
+  }
+
+  /// Null (nothing drawn) when no student is signed in.
+  Widget? _buildWatermark() {
+    final name = AuthService.loggedInStudentName;
+    if (name == null || name.trim().isEmpty) return null;
+    return StudentWatermark(name: name, password: AuthService.activePassword);
   }
 
   Widget _buildBody() {
     if (_isDecrypting) return _buildDecryptingState();
     if (_errorMessage != null) return _buildErrorState();
+    final bytes = _pdfBytes;
+    if (bytes == null) return _buildErrorState();
 
-    return SfPdfViewer.file(
-      File(_tempPdfPath!),
+    return SfPdfViewer.memory(
+      bytes,
       controller: _pdfViewerController,
       canShowScrollHead: false,
       enableDoubleTapZooming: true,
       canShowScrollStatus: true,
       pageSpacing: 4,
       pageLayoutMode: PdfPageLayoutMode.continuous,
+      // No copying lesson text out, and no links that leave the protected
+      // viewer (contract §3.9).
+      enableTextSelection: false,
+      enableHyperlinkNavigation: false,
+      canShowHyperlinkDialog: false,
     );
   }
 

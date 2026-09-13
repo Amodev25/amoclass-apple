@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:amo_core/amo_core.dart';
 import '../core/amo_native_bridge.dart';
+import '../core/anti_capture.dart';
 import '../core/platform_ui.dart';
 import '../core/audio_output_platform.dart';
 import '../services/auth_service.dart';
@@ -275,7 +276,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     _checkResume();
   }
 
-  String get _progressKey => widget.originalFilePath ?? widget.videoPath;
+  /// `<serverCode>/<file name>` — never an absolute local path (contract §3.12).
+  String get _progressKey =>
+      ProgressService.keyFor(widget.originalFilePath ?? widget.videoPath);
 
   void _checkResume() {
     if (!mounted) return;
@@ -695,9 +698,23 @@ class _PlayerScreenState extends State<PlayerScreen>
 
           // Headphone-disconnected overlay (requireHeadphones courses)
           if (_headphonesMissing) _buildHeadphonesOverlay(),
+
+          // Student name + password watermark (owner decision 2026-09-14).
+          // LAST child so no overlay draws over it. iPhone landscape and a
+          // fullscreen macOS window (the system green button) re-lay out this
+          // same Stack — neither pushes a route — so this one instance covers
+          // fullscreen.
+          ?_buildWatermark(),
         ],
       ),
     );
+  }
+
+  /// Null (nothing drawn) when no student is signed in.
+  Widget? _buildWatermark() {
+    final name = AuthService.loggedInStudentName;
+    if (name == null || name.trim().isEmpty) return null;
+    return StudentWatermark(name: name, password: AuthService.activePassword);
   }
 
   Widget _buildHeadphonesOverlay() {
@@ -932,38 +949,51 @@ class _PlayerScreenState extends State<PlayerScreen>
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.drmAccent.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.shield,
-                            size: 10,
-                            color: AppColors.drmAccent,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            AmoL10n.of(context).playerScreenRecordingBlocked,
-                            style: TextStyle(
-                              color: AppColors.drmAccent,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
+                // Claimed only when the window really is excluded from
+                // capture (macOS, read back from the window). iOS cannot
+                // block a recording — it covers the screen instead — so the
+                // badge would be untrue there and is not shown.
+                ValueListenableBuilder<bool>(
+                  valueListenable: AntiCapture.protectedNow,
+                  builder: (context, protectedNow, _) => !protectedNow
+                      ? const SizedBox.shrink()
+                      : Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.drmAccent.withValues(
+                                  alpha: 0.2,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.shield,
+                                    size: 10,
+                                    color: AppColors.drmAccent,
+                                  ),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    AmoL10n.of(
+                                      context,
+                                    ).playerScreenRecordingBlocked,
+                                    style: TextStyle(
+                                      color: AppColors.drmAccent,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                          ],
+                        ),
                 ),
               ],
             ),
