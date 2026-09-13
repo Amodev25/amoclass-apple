@@ -392,6 +392,8 @@ class AuthService {
     SessionService.clearSession();
     // Clear library to prevent cross-course data leakage
     LibraryService.clearCache();
+    // Previews are stored as plain images, so they leave with the session.
+    LibraryService.purgeThumbnails();
     // Clean up any decrypted temp files
     DecryptionService.cleanupTempFiles();
   }

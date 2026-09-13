@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'auth_service.dart';
+import 'library_service.dart';
 import '../core/decryption_service.dart';
 
 /// A remote file as returned by the teacher's cloud storage.
@@ -381,67 +382,100 @@ class RemoteLibraryService {
 
   // ─── Thumbnail preview (online tab) ───────────────────────────────────────
 
-  /// Decrypted thumbnail previews keyed by file id. A cached null means
-  /// "definitively no preview" (fetched OK but no embedded thumbnail or wrong
-  /// key) and prevents repeat fetches. Transient failures are not cached.
-  static final Map<int, Uint8List?> _thumbCache = {};
-
-  /// Bytes range-fetched for a preview: header + metadata + thumbnail. A
-  /// thumbnail is one small JPEG/PNG frame, so 96 KB covers almost all files in
-  /// a single request; any larger thumbnail simply falls back to an icon.
+  /// Bytes range-fetched for a preview on the fallback path: header + metadata
+  /// + thumbnail. A thumbnail is one small JPEG/PNG frame, so 96 KB covers
+  /// almost all files; any larger thumbnail simply falls back to an icon.
   static const int _thumbPreviewBytes = 96 * 1024;
+
+  /// Whether the Worker has `/storage/thumbnail`. Unknown until it first
+  /// answers. A Worker deployed before the route existed answers 404, and the
+  /// app then uses the signed-URL path for the rest of the session.
+  static bool? _thumbnailRoute;
 
   /// Returns the decrypted thumbnail for a remote file, or null if none.
   ///
-  /// If the file is already downloaded it is decrypted from disk; otherwise
-  /// only the first [_thumbPreviewBytes] are range-fetched from R2 and
-  /// decrypted in memory. The file stays encrypted at rest and the data key
-  /// never leaves the device — same trust model as the offline tab.
-  static Future<Uint8List?> fetchThumbnail(RemoteFile file) async {
-    if (_thumbCache.containsKey(file.id)) return _thumbCache[file.id];
+  /// Kept in [LibraryService.thumbnails] like the offline tab's previews, so a
+  /// folder opened again, or on the next launch, costs no network at all.
+  /// When a preview does have to be fetched it takes one small request: the
+  /// Worker returns just the encrypted header, metadata and thumbnail, and the
+  /// data key never leaves the device.
+  static Future<Uint8List?> fetchThumbnail(
+    RemoteFile file, {
+    bool Function()? stillWanted,
+  }) {
+    final course = AuthService.loggedInServerCode ?? '';
+    return LibraryService.thumbnails.get(
+      ThumbnailStore.idFor('r', '$course/${file.id}'),
+      '${file.fileSize}-${ThumbnailStore.digest(file.uploadedAt, 12)}',
+      () => _produceThumbnail(file),
+      stillWanted: stillWanted,
+    );
+  }
 
+  static Future<Uint8List?> _produceThumbnail(RemoteFile file) async {
     // Already downloaded → decrypt locally, no network needed.
     final localPath = await findLocalFile(file);
     if (localPath != null) {
-      final thumb = await DecryptionService.extractThumbnail(localPath);
-      _thumbCache[file.id] = thumb;
-      return thumb;
+      return DecryptionService.extractThumbnail(localPath);
+    }
+    final bytes = await _fetchPreviewBytes(file);
+    if (bytes == null) return null;
+    return DecryptionService.extractThumbnailFromBytes(bytes);
+  }
+
+  /// The encrypted prefix that holds the thumbnail. Null means the file has no
+  /// preview. A transient failure throws, so it is not remembered as "none".
+  static Future<Uint8List?> _fetchPreviewBytes(RemoteFile file) async {
+    if (_thumbnailRoute != false) {
+      final headers = AuthService.authHeaders;
+      if (headers.isEmpty) throw StateError('not signed in');
+      final response = await _dio.get<List<int>>(
+        '${AuthService.workerUrl}/storage/thumbnail',
+        queryParameters: {'fileId': file.id},
+        options: Options(
+          headers: headers,
+          responseType: ResponseType.bytes,
+          validateStatus: (status) => status != null,
+        ),
+      );
+      final status = response.statusCode ?? 0;
+      if (status == 200) {
+        _thumbnailRoute = true;
+        return Uint8List.fromList(response.data ?? const <int>[]);
+      }
+      if (status == 204) {
+        _thumbnailRoute = true;
+        return null;
+      }
+      if (status != 404) {
+        throw StateError('thumbnail request failed: $status');
+      }
+      _thumbnailRoute = false; // older Worker: fall through to signed URL
     }
 
     final url = await getDownloadUrl(file.id);
-    if (url == null) return null; // transient — leave uncached for retry
+    if (url == null) throw StateError('no download URL');
 
-    try {
-      final response = await _dio.get<ResponseBody>(
-        url,
-        options: Options(
-          responseType: ResponseType.stream,
-          headers: {'Range': 'bytes=0-${_thumbPreviewBytes - 1}'},
-          validateStatus: (status) => status != null && status < 500,
-        ),
-      );
-      if (response.statusCode == 200 || response.statusCode == 206) {
-        // Collect only up to _thumbPreviewBytes, then stop — bounds memory even
-        // if the server ignores the Range header and starts a full-file body.
-        final builder = BytesBuilder(copy: false);
-        await for (final chunk in response.data!.stream) {
-          builder.add(chunk);
-          if (builder.length >= _thumbPreviewBytes) break;
-        }
-        final thumb = DecryptionService.extractThumbnailFromBytes(
-          builder.toBytes(),
-        );
-        _thumbCache[file.id] = thumb; // definitive result (may be null)
-        return thumb;
-      }
-    } catch (_) {
-      // Transient network error — leave uncached so it can be retried.
+    final response = await _dio.get<ResponseBody>(
+      url,
+      options: Options(
+        responseType: ResponseType.stream,
+        headers: {'Range': 'bytes=0-${_thumbPreviewBytes - 1}'},
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
+    if (response.statusCode != 200 && response.statusCode != 206) {
+      throw StateError('preview range failed: ${response.statusCode}');
     }
-    return null;
+    // Collect only up to _thumbPreviewBytes, then stop — bounds memory even
+    // if the server ignores the Range header and starts a full-file body.
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in response.data!.stream) {
+      builder.add(chunk);
+      if (builder.length >= _thumbPreviewBytes) break;
+    }
+    return builder.toBytes();
   }
-
-  /// Clear cached previews (call on logout / course switch).
-  static void clearThumbnailCache() => _thumbCache.clear();
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 

@@ -270,6 +270,14 @@ class AmoL10nEn extends AmoL10n {
   }
 
   @override
+  String get libraryNotEnoughSpaceTitle => 'Not enough space';
+
+  @override
+  String libraryNotEnoughSpaceBody(String needed, String available) {
+    return 'Importing needs about $needed of free space, but only $available is free. Free up some space and try again.';
+  }
+
+  @override
   String get libraryNotYourCourseTitle => 'Not In Your Course';
 
   @override

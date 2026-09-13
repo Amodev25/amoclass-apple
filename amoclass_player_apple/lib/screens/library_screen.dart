@@ -10,6 +10,7 @@ import '../services/progress_service.dart';
 import '../services/remote_library_service.dart';
 import '../core/decryption_service.dart';
 import '../core/audio_output_platform.dart';
+import '../core/storage_platform.dart';
 import '../services/auth_service.dart';
 import 'player_screen.dart';
 import 'pdf_viewer_screen.dart';
@@ -206,6 +207,12 @@ class _LibraryScreenState extends State<LibraryScreen>
 
     if (result == null || result.files.isEmpty) return;
 
+    if (!await _hasRoomFor(result.files)) {
+      await _clearPickerCopies();
+      return;
+    }
+    if (!mounted) return;
+
     setState(() => _isImporting = true);
 
     // ── Progress dialog ───────────────────────────────────────
@@ -344,12 +351,16 @@ class _LibraryScreenState extends State<LibraryScreen>
             }
             setState(() => _isImporting = false);
             _showNotYourCourseDialog(file.name);
+            unawaited(_clearPickerCopies());
             return;
           }
         }
         failed++;
       }
+      await _discardPickerCopy(file.path!);
     }
+
+    await _clearPickerCopies();
 
     if (mounted && !dlgClosed) {
       dlgClosed = true;
@@ -413,6 +424,78 @@ class _LibraryScreenState extends State<LibraryScreen>
         ),
       );
     }
+  }
+
+  /// Room kept free beyond the files themselves: the index, previews, and the
+  /// operating system's own margin.
+  static const int _importHeadroomBytes = 200 * 1024 * 1024;
+
+  /// Checks free space before any copying starts, so a large lecture is
+  /// refused up front with a clear message rather than failing half-way.
+  Future<bool> _hasRoomFor(List<PlatformFile> files) async {
+    final sizes = files.map((f) => f.size).where((s) => s > 0).toList();
+    if (sizes.isEmpty) return true;
+    // A mobile picker has already copied every file (that space is used
+    // already), and each copy is deleted as soon as its import finishes, so
+    // at any moment the extra space needed is one file. Desktop pickers hand
+    // back the originals, so every copy adds up.
+    final onMobile = Platform.isIOS || Platform.isAndroid;
+    final needed =
+        (onMobile
+            ? sizes.reduce((a, b) => a > b ? a : b)
+            : sizes.fold<int>(0, (a, b) => a + b)) +
+        _importHeadroomBytes;
+    final free = await StoragePlatform.freeBytes(
+      await LibraryService.getVideosDir(),
+    );
+    if (free == null || free >= needed) return true;
+    if (mounted) _showNotEnoughSpaceDialog(needed, free);
+    return false;
+  }
+
+  void _showNotEnoughSpaceDialog(int needed, int available) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          AmoL10n.of(context).libraryNotEnoughSpaceTitle,
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          AmoL10n.of(context).libraryNotEnoughSpaceBody(
+            _formatSize(needed),
+            _formatSize(available),
+          ),
+          style: const TextStyle(color: AppColors.mutedGray),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(AmoL10n.of(context).actionOk),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Deletes the picker's private copy of one file once its import is over,
+  /// whatever the outcome, so a batch never holds every copy until the end.
+  Future<void> _discardPickerCopy(String path) async {
+    if (!await LibraryService.isPickerCopy(path)) return;
+    try {
+      await File(path).delete();
+    } catch (_) {}
+  }
+
+  /// Clears anything the picker left behind. Mobile only: desktop pickers
+  /// make no copies.
+  Future<void> _clearPickerCopies() async {
+    if (!(Platform.isIOS || Platform.isAndroid)) return;
+    try {
+      await FilePicker.platform.clearTemporaryFiles();
+    } catch (_) {}
   }
 
   void _showNotYourCourseDialog(String fileName) {
@@ -1750,33 +1833,39 @@ class _LibraryScreenState extends State<LibraryScreen>
                     ),
                   ),
                 )
-              : ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    if (visibleFolders.isNotEmpty || visibleFiles.isNotEmpty)
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.border),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.35),
-                                blurRadius: 16,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            children: [
-                              ...visibleFolders.map(_buildOnlineFolderRow),
-                              ...visibleFiles.map(_buildOnlineFileRow),
-                            ],
-                          ),
+              // Built lazily: only rows on screen exist, so only their
+              // previews are fetched. The old Column built every row, and
+              // started every row's preview request, the moment a folder
+              // opened.
+              : CustomScrollView(
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.all(24),
+                      sliver: DecoratedSliver(
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.border),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              blurRadius: 16,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        sliver: SliverList.builder(
+                          itemCount:
+                              visibleFolders.length + visibleFiles.length,
+                          itemBuilder: (context, index) =>
+                              index < visibleFolders.length
+                              ? _buildOnlineFolderRow(visibleFolders[index])
+                              : _buildOnlineFileRow(
+                                  visibleFiles[index - visibleFolders.length],
+                                ),
                         ),
                       ),
+                    ),
                   ],
                 ),
         ),
@@ -2299,8 +2388,8 @@ class _LibraryScreenState extends State<LibraryScreen>
         ? LibraryService.videosInFolder(folderName)
         : LibraryService.documentsInFolder(folderName);
     final count = itemsInFolder.length;
-    final previewThumb = itemsInFolder.isNotEmpty
-        ? itemsInFolder.first.thumbnail
+    final previewPath = itemsInFolder.isNotEmpty
+        ? itemsInFolder.first.filePath
         : null;
 
     return _AnimatedListItem(
@@ -2340,32 +2429,42 @@ class _LibraryScreenState extends State<LibraryScreen>
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        if (previewThumb != null)
-                          Opacity(
-                            opacity: 0.35,
-                            child: Image.memory(
-                              previewThumb,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => _buildFolderIconBg(),
-                            ),
-                          )
-                        else
-                          Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  AppColors.folderAccent.withValues(
-                                    alpha: 0.12,
+                        AsyncThumbnail(
+                          cacheKey: previewPath ?? '',
+                          load: (wanted) => previewPath == null
+                              ? Future.value(null)
+                              : LibraryService.getThumbnail(
+                                  previewPath,
+                                  stillWanted: wanted,
+                                ),
+                          builder: (context, bytes) => bytes == null
+                              ? Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        AppColors.folderAccent.withValues(
+                                          alpha: 0.12,
+                                        ),
+                                        AppColors.folderAccentAlt.withValues(
+                                          alpha: 0.03,
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  AppColors.folderAccentAlt.withValues(
-                                    alpha: 0.03,
+                                )
+                              : Opacity(
+                                  opacity: 0.35,
+                                  child: Image.memory(
+                                    bytes,
+                                    fit: BoxFit.cover,
+                                    gaplessPlayback: true,
+                                    errorBuilder: (_, _, _) =>
+                                        _buildFolderIconBg(),
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
+                                ),
+                        ),
                         Center(child: _buildFolderIconBg()),
                       ],
                     ),
@@ -2508,14 +2607,22 @@ class _LibraryScreenState extends State<LibraryScreen>
                             ),
                           )
                         else
-                          (video.thumbnail != null
-                              ? Image.memory(
-                                  video.thumbnail!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, _, _) =>
-                                      _buildPlaceholderThumb(),
-                                )
-                              : _buildPlaceholderThumb()),
+                          AsyncThumbnail(
+                            cacheKey: video.filePath,
+                            load: (wanted) => LibraryService.getThumbnail(
+                              video.filePath,
+                              stillWanted: wanted,
+                            ),
+                            builder: (context, bytes) => bytes == null
+                                ? _buildPlaceholderThumb()
+                                : Image.memory(
+                                    bytes,
+                                    fit: BoxFit.cover,
+                                    gaplessPlayback: true,
+                                    errorBuilder: (_, _, _) =>
+                                        _buildPlaceholderThumb(),
+                                  ),
+                          ),
                         // Overlay gradient
                         Container(
                           decoration: BoxDecoration(
@@ -2767,9 +2874,25 @@ class _RemoteThumbnailState extends State<_RemoteThumbnail> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant _RemoteThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A lazily built list recycles rows, so this state can be handed a
+    // different file.
+    if (oldWidget.file.id != widget.file.id) {
+      _thumb = null;
+      _load();
+    }
+  }
+
   Future<void> _load() async {
-    final thumb = await RemoteLibraryService.fetchThumbnail(widget.file);
-    if (!mounted || thumb == null) return;
+    final id = widget.file.id;
+    bool current() => mounted && widget.file.id == id;
+    final thumb = await RemoteLibraryService.fetchThumbnail(
+      widget.file,
+      stillWanted: current,
+    );
+    if (thumb == null || !current()) return;
     setState(() => _thumb = thumb);
   }
 

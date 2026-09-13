@@ -487,6 +487,18 @@ abstract class AmoL10n {
   /// **'Remove \"{name}\" from library?\n(The file won\'t be deleted)'**
   String libraryRemoveBody(String name);
 
+  /// No description provided for @libraryNotEnoughSpaceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Not enough space'**
+  String get libraryNotEnoughSpaceTitle;
+
+  /// No description provided for @libraryNotEnoughSpaceBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Importing needs about {needed} of free space, but only {available} is free. Free up some space and try again.'**
+  String libraryNotEnoughSpaceBody(String needed, String available);
+
   /// No description provided for @libraryNotYourCourseTitle.
   ///
   /// In en, this message translates to:

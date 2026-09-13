@@ -284,6 +284,14 @@ class AmoL10nAr extends AmoL10n {
   }
 
   @override
+  String get libraryNotEnoughSpaceTitle => 'المساحة غير كافية';
+
+  @override
+  String libraryNotEnoughSpaceBody(String needed, String available) {
+    return 'يحتاج الاستيراد إلى نحو $needed من المساحة الفارغة، والمتاح $available فقط. أفرغ بعض المساحة ثم حاول مرة أخرى.';
+  }
+
+  @override
   String get libraryNotYourCourseTitle => 'ليس ضمن كورسك';
 
   @override

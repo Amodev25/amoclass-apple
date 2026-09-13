@@ -16,6 +16,7 @@ static NSString *const kAntiCaptureChannel = @"com.lockclass/anti_capture";
 static NSString *const kFocusChannel       = @"com.lockclass/focus_mode";
 static NSString *const kStreamChannel      = @"com.lockclass/amo_stream";
 static NSString *const kAudioChannel       = @"com.lockclass/audio_output";
+static NSString *const kStorageChannel     = @"com.lockclass/storage";
 
 /* Keychain account under which the persistent device id is stored. Unlike
    identifierForVendor, a Keychain item survives app deletion, so a licence
@@ -45,7 +46,7 @@ static NSString *const kDeviceIdAccount = @"device_id";
   NSObject<FlutterBinaryMessenger> *messenger = [registrar messenger];
 
   for (NSString *name in @[ kAntiCaptureChannel, kFocusChannel,
-                            kStreamChannel, kAudioChannel ]) {
+                            kStreamChannel, kAudioChannel, kStorageChannel ]) {
     FlutterMethodChannel *channel =
         [FlutterMethodChannel methodChannelWithName:name binaryMessenger:messenger];
     [registrar addMethodCallDelegate:instance channel:channel];
@@ -93,6 +94,10 @@ static NSString *const kDeviceIdAccount = @"device_id";
   } else if ([m isEqualToString:@"headphonesConnected"]) {
     result(@([self headphonesConnected]));
 
+  /* ── Storage channel ──────────────────────────────────────────────────── */
+  } else if ([m isEqualToString:@"freeBytes"]) {
+    result([self freeBytesAtPath:call.arguments[@"path"]]);
+
   /* ── Focus mode channel ───────────────────────────────────────────────── */
   } else if ([m isEqualToString:@"startLockTask"]) {
     result(@([self startLock]));
@@ -116,6 +121,31 @@ static NSString *const kDeviceIdAccount = @"device_id";
   } else {
     result(FlutterMethodNotImplemented);
   }
+}
+
+#pragma mark - Free space
+
+/* Bytes an import may use on the volume holding `path`, or NSNull when it
+   cannot be told. On iOS the "important usage" figure is the honest one: it
+   counts space the system would purge (caches, offloadable apps) to make room
+   for something the user asked for, which the plain free-size figure does
+   not. The Dart side treats NSNull as "unknown" and lets the import proceed. */
+- (id)freeBytesAtPath:(id)path {
+  if (![path isKindOfClass:[NSString class]] || [(NSString *)path length] == 0) {
+    return [NSNull null];
+  }
+  NSURL *url = [NSURL fileURLWithPath:(NSString *)path];
+  NSDictionary *values =
+      [url resourceValuesForKeys:@[ NSURLVolumeAvailableCapacityForImportantUsageKey ]
+                           error:nil];
+  NSNumber *important = values[NSURLVolumeAvailableCapacityForImportantUsageKey];
+  if (important != nil && important.longLongValue > 0) return important;
+
+  NSDictionary *attrs =
+      [[NSFileManager defaultManager] attributesOfFileSystemForPath:(NSString *)path
+                                                              error:nil];
+  NSNumber *free = attrs[NSFileSystemFreeSize];
+  return free ?: [NSNull null];
 }
 
 #pragma mark - Device id (Keychain-backed, survives reinstall)

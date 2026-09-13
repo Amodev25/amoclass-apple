@@ -144,6 +144,18 @@
       }
     }
   },
+  "libraryNotEnoughSpaceTitle": "Not enough space",
+  "libraryNotEnoughSpaceBody": "Importing needs about {needed} of free space, but only {available} is free. Free up some space and try again.",
+  "@libraryNotEnoughSpaceBody": {
+    "placeholders": {
+      "needed": {
+        "type": "String"
+      },
+      "available": {
+        "type": "String"
+      }
+    }
+  },
   "libraryNotYourCourseTitle": "Not In Your Course",
   "libraryNotYourCourseBody": "This file was encrypted for a different course. It cannot be opened with your current server code.",
   "libraryNotYourCourseContact": "Please contact your instructor if you believe this is an error.",

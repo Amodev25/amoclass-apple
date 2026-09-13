@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import '../core/decryption_service.dart';
 import 'auth_service.dart';
-import 'remote_library_service.dart';
 
 /// Manages the media library (encrypted videos and PDFs)
 class LibraryService {
@@ -29,9 +28,12 @@ class LibraryService {
   static String? _libraryPath;
   static String? _appDataPath;
 
-  /// In-memory thumbnail cache. Max 50 entries to bound memory usage.
-  static const int _maxThumbnailCache = 50;
-  static final Map<String, Uint8List> _thumbnailCache = {};
+  /// Previews for both tabs, local and online. Kept on disk inside the
+  /// course's app-private folder, so they are produced once per item rather
+  /// than on every launch.
+  static final ThumbnailStore thumbnails = ThumbnailStore(
+    directory: getThumbnailsDir,
+  );
 
   // ────────────── Cache clear (call on course switch / logout) ──
   static void clearCache() {
@@ -39,24 +41,53 @@ class LibraryService {
     _loaded = false;
     _libraryPath = null;
     _appDataPath = null;
-    _thumbnailCache.clear();
-    RemoteLibraryService.clearThumbnailCache();
+    thumbnails.clearMemory();
   }
 
-  /// Get a cached thumbnail, or decrypt and cache it.
-  static Future<Uint8List?> getCachedThumbnail(String filePath) async {
-    final cached = _thumbnailCache[filePath];
-    if (cached != null) return cached;
-
-    final thumb = await DecryptionService.extractThumbnail(filePath);
-    if (thumb != null) {
-      // Evict oldest entry if cache is full
-      if (_thumbnailCache.length >= _maxThumbnailCache) {
-        _thumbnailCache.remove(_thumbnailCache.keys.first);
-      }
-      _thumbnailCache[filePath] = thumb;
+  /// Preview for a local item.
+  ///
+  /// The first request decrypts it and checks the file's HMAC; later ones read
+  /// the stored copy. A changed size or modification time produces it again.
+  /// Playback does not rely on this check: it verifies the HMAC itself.
+  static Future<Uint8List?> getThumbnail(
+    String filePath, {
+    bool Function()? stillWanted,
+  }) async {
+    final FileStat stat;
+    try {
+      stat = await File(filePath).stat();
+    } catch (_) {
+      return null;
     }
-    return thumb;
+    if (stat.type == FileSystemEntityType.notFound) return null;
+    return thumbnails.get(
+      ThumbnailStore.idFor('l', filePath),
+      '${stat.size}-${stat.modified.millisecondsSinceEpoch}',
+      () => DecryptionService.extractThumbnail(filePath),
+      stillWanted: stillWanted,
+    );
+  }
+
+  /// Deletes every stored preview, for every course on this device. Called on
+  /// logout: previews are plain images, so they must not outlive the session
+  /// that was entitled to see them.
+  static Future<void> purgeThumbnails() async {
+    thumbnails.clearMemory();
+    try {
+      final appDir = await getApplicationSupportDirectory();
+      final candidates = <Directory>[Directory('${appDir.path}/Thumbnails')];
+      final courses = Directory('${appDir.path}/courses');
+      if (await courses.exists()) {
+        await for (final course in courses.list(followLinks: false)) {
+          if (course is Directory) {
+            candidates.add(Directory('${course.path}/Thumbnails'));
+          }
+        }
+      }
+      for (final dir in candidates) {
+        if (await dir.exists()) await dir.delete(recursive: true);
+      }
+    } catch (_) {}
   }
 
   // ────────────── Paths ──────────────────────────────────────
@@ -100,6 +131,15 @@ class LibraryService {
     return dir.path;
   }
 
+  /// Where previews are stored. Application Support, never Documents: on iOS
+  /// Documents is visible in the Files app.
+  static Future<Directory> getThumbnailsDir() async {
+    final appDir = await _getAppDataPath();
+    final dir = Directory('$appDir/Thumbnails');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    return dir;
+  }
+
   // ────────────── Load / Save ────────────────────────────────
 
   /// Auto-generated folder names used in old versions — treated as no folder.
@@ -115,49 +155,67 @@ class LibraryService {
     if (_loaded) return _items;
 
     bool needsResave = false;
+    List<dynamic>? jsonList;
 
     try {
-      final path = await _getLibraryPath();
-      final file = File(path);
+      final file = File(await _getLibraryPath());
       if (await file.exists()) {
-        final jsonStr = await file.readAsString();
-        final jsonList = jsonDecode(jsonStr) as List<dynamic>;
-        _items = [];
-
-        for (final json in jsonList) {
-          try {
-            final item = VideoItem.fromJson(json as Map<String, dynamic>);
-            if (await File(item.filePath).exists()) {
-              final thumb = await getCachedThumbnail(item.filePath);
-
-              // ── Migration: clear legacy auto-folder names ──────────
-              final cleanFolder = _migratedFolder(item.folderName);
-              if (cleanFolder != item.folderName) needsResave = true;
-
-              _items.add(
-                VideoItem(
-                  filePath: item.filePath,
-                  name: item.name,
-                  originalExtension: item.originalExtension,
-                  fileSize: item.fileSize,
-                  originalSize: item.originalSize,
-                  thumbnail: thumb,
-                  folderName: cleanFolder,
-                  contentType: item.contentType,
-                  addedAt: item.addedAt,
-                ),
-              );
-            }
-          } catch (_) {
-            // Skip a single malformed entry instead of dropping the whole
-            // library — one corrupt record must not look like "no videos".
-            needsResave = true;
-            continue;
-          }
+        try {
+          jsonList = jsonDecode(await file.readAsString()) as List<dynamic>;
+        } catch (_) {
+          // The index is unreadable. This used to leave the library empty,
+          // and the next import then saved that empty list over the index:
+          // every earlier item gone for good, its file still on disk. Move
+          // the broken file aside instead and rebuild from the files, which
+          // each carry their own name, folder and course in the header.
+          await _setAside(file);
         }
       }
-    } catch (e) {
+    } catch (_) {}
+
+    if (jsonList == null) {
+      _items = await _rebuildFromDisk();
+      needsResave = _items.isNotEmpty;
+    } else {
+      final parsed = <VideoItem>[];
+      for (final json in jsonList) {
+        try {
+          parsed.add(VideoItem.fromJson(json as Map<String, dynamic>));
+        } catch (_) {
+          // Skip a single malformed entry instead of dropping the whole
+          // library — one corrupt record must not look like "no videos".
+          needsResave = true;
+        }
+      }
+
+      // Nothing here opens the files themselves: previews load later, only
+      // for the rows on screen. Existence checks run together.
+      final exists = await Future.wait(
+        parsed.map((item) => File(item.filePath).exists()),
+      );
+
       _items = [];
+      for (int i = 0; i < parsed.length; i++) {
+        if (!exists[i]) continue;
+        final item = parsed[i];
+
+        // ── Migration: clear legacy auto-folder names ──────────
+        final cleanFolder = _migratedFolder(item.folderName);
+        if (cleanFolder != item.folderName) needsResave = true;
+
+        _items.add(
+          VideoItem(
+            filePath: item.filePath,
+            name: item.name,
+            originalExtension: item.originalExtension,
+            fileSize: item.fileSize,
+            originalSize: item.originalSize,
+            folderName: cleanFolder,
+            contentType: item.contentType,
+            addedAt: item.addedAt,
+          ),
+        );
+      }
     }
 
     _loaded = true;
@@ -168,11 +226,74 @@ class LibraryService {
     return _items;
   }
 
-  static Future<void> _saveLibrary() async {
+  /// Keeps an unreadable index next to the new one rather than deleting it.
+  static Future<void> _setAside(File index) async {
+    final aside =
+        '${index.path}.unreadable-'
+        '${DateTime.now().millisecondsSinceEpoch}';
+    try {
+      await index.rename(aside);
+    } catch (_) {
+      try {
+        await index.copy(aside);
+      } catch (_) {}
+    }
+  }
+
+  /// Recreates the index from what is actually on disk.
+  static Future<List<VideoItem>> _rebuildFromDisk() async {
+    final myCode = AuthService.loggedInServerCode;
+    final items = <VideoItem>[];
+    for (final dirPath in [await getVideosDir(), await getDocumentsDir()]) {
+      try {
+        await for (final entity in Directory(dirPath).list()) {
+          if (entity is! File) continue;
+          final header = await DecryptionService.parseHeader(entity.path);
+          if (header == null) continue;
+          final code = header.serverCode;
+          if (code != null && code.isNotEmpty && code != myCode) continue;
+          final stat = await entity.stat();
+          items.add(
+            VideoItem(
+              filePath: entity.path,
+              name: header.videoName,
+              originalExtension: header.originalExtension,
+              fileSize: stat.size,
+              originalSize: header.originalSize,
+              folderName:
+                  (header.folderName != null && header.folderName!.isNotEmpty)
+                  ? header.folderName
+                  : null,
+              contentType: header.contentType,
+              addedAt: stat.modified,
+            ),
+          );
+        }
+      } catch (_) {}
+    }
+    items.sort((a, b) => a.addedAt.compareTo(b.addedAt));
+    return items;
+  }
+
+  static Future<void> _pendingSave = Future.value();
+
+  /// Saves are queued so two of them never write the same temp file at once.
+  static Future<void> _saveLibrary() {
+    final next = _pendingSave.catchError((_) {}).then((_) => _writeIndex());
+    _pendingSave = next;
+    return next;
+  }
+
+  /// Writes the whole index to a temp file, then renames it over the real
+  /// one. A rename is atomic, so if the app is killed mid-save the index on
+  /// disk is the complete old version or the complete new one — never a
+  /// truncated file.
+  static Future<void> _writeIndex() async {
     final path = await _getLibraryPath();
-    final file = File(path);
+    final tmp = File('$path.tmp');
     final jsonList = _items.map((v) => v.toJson()).toList();
-    await file.writeAsString(jsonEncode(jsonList));
+    await tmp.writeAsString(jsonEncode(jsonList), flush: true);
+    await tmp.rename(path);
   }
 
   // ────────────── Import ─────────────────────────────────────
@@ -205,7 +326,6 @@ class LibraryService {
       }
     }
 
-    final thumbnail = await getCachedThumbnail(filePath);
     final fileSize = await File(filePath).length();
 
     // Only use folder name if explicitly set in the encryptor header
@@ -242,13 +362,16 @@ class LibraryService {
       originalExtension: header.originalExtension,
       fileSize: fileSize,
       originalSize: header.originalSize,
-      thumbnail: thumbnail,
       folderName: folderName,
       contentType: header.contentType,
     );
 
     _items.add(item);
     await _saveLibrary();
+
+    // Pay for the preview (and its HMAC check) now, while the import dialog
+    // is up anyway, rather than on the library's first paint.
+    if (!isPdf) await getThumbnail(storedPath);
     return item;
   }
 
@@ -295,10 +418,32 @@ class LibraryService {
     }
   }
 
+  /// Whether [path] is a private copy a mobile file picker made for this
+  /// import, and therefore safe to delete once the import has its own copy.
+  ///
+  /// file_picker copies every pick into `cacheDir/file_picker/` on Android and
+  /// into `NSTemporaryDirectory()` on iOS. Desktop pickers return the
+  /// student's original file, which is never deleted.
+  static Future<bool> isPickerCopy(String path) async {
+    try {
+      if (Platform.isAndroid) {
+        final cache = (await getTemporaryDirectory()).path;
+        return path.startsWith('$cache/file_picker/');
+      }
+      if (Platform.isIOS) {
+        var tmp = Directory.systemTemp.path;
+        if (!tmp.endsWith('/')) tmp = '$tmp/';
+        return tmp.length > 8 && tmp.contains('/tmp/') && path.startsWith(tmp);
+      }
+    } catch (_) {}
+    return false;
+  }
+
   /// Remove an item from the library (doesn't delete the file)
   static Future<void> removeVideo(String filePath) async {
     _items.removeWhere((v) => v.filePath == filePath);
     await _saveLibrary();
+    await thumbnails.remove(ThumbnailStore.idFor('l', filePath));
   }
 
   // ────────────── Query ──────────────────────────────────────
