@@ -266,7 +266,7 @@ class AmoL10nEn extends AmoL10n {
 
   @override
   String libraryRemoveBody(String name) {
-    return 'Remove \"$name\" from library?\n(The file won\'t be deleted)';
+    return 'Remove \"$name\" from the library?\nThe file will be deleted from this device.';
   }
 
   @override

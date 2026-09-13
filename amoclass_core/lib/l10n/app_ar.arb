@@ -64,7 +64,7 @@
   "libraryImportResult": "{imported, plural, =1{تم استيراد ملف واحد بنجاح} =2{تم استيراد ملفين بنجاح} few{تم استيراد {imported} ملفات بنجاح} many{تم استيراد {imported} ملفاً بنجاح} other{تم استيراد {imported} ملف بنجاح}}",
   "libraryImportResultWithFailures": "{imported, plural, =1{تم استيراد ملف واحد} =2{تم استيراد ملفين} few{تم استيراد {imported} ملفات} many{تم استيراد {imported} ملفاً} other{تم استيراد {imported} ملف}}، {failed, plural, =1{وفشل ملف واحد} =2{وفشل ملفان} few{وفشلت {failed} ملفات} many{وفشل {failed} ملفاً} other{وفشل {failed} ملف}}",
   "libraryRemoveTitle": "إزالة الملف",
-  "libraryRemoveBody": "إزالة \"{name}\" من المكتبة؟\n(لن يُحذف الملف نفسه)",
+  "libraryRemoveBody": "إزالة \"{name}\" من المكتبة؟\nسيُحذف الملف من هذا الجهاز.",
   "libraryNotEnoughSpaceTitle": "المساحة غير كافية",
   "libraryNotEnoughSpaceBody": "يحتاج الاستيراد إلى نحو {needed} من المساحة الفارغة، والمتاح {available} فقط. أفرغ بعض المساحة ثم حاول مرة أخرى.",
   "libraryNotYourCourseTitle": "ليس ضمن كورسك",

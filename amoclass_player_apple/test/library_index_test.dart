@@ -100,6 +100,41 @@ void main() {
     });
   });
 
+  group('removing an item', () {
+    test(
+      'deletes the imported copy, never a file outside the course',
+      () async {
+        final inside = File('${root.path}/Videos/lesson.amo');
+        await inside.create(recursive: true);
+        final outside = File('${root.path}_elsewhere/original.amo');
+        await outside.create(recursive: true);
+        await File('${root.path}/amo_library.json').writeAsString(
+          jsonEncode([
+            for (final f in [inside, outside])
+              {
+                'filePath': f.path,
+                'name': f.path,
+                'originalExtension': 'mp4',
+                'fileSize': 0,
+                'originalSize': 0,
+                'contentType': 'video',
+                'addedAt': '2026-01-01T00:00:00.000',
+              },
+          ]),
+        );
+        await LibraryService.loadLibrary();
+
+        await LibraryService.removeVideo(inside.path);
+        await LibraryService.removeVideo(outside.path);
+
+        expect(inside.existsSync(), isFalse);
+        expect(outside.existsSync(), isTrue);
+        expect(LibraryService.videos, isEmpty);
+        await outside.parent.delete(recursive: true);
+      },
+    );
+  });
+
   group('thumbnail store', () {
     ThumbnailStore store({int concurrent = 3}) => ThumbnailStore(
       directory: () async => Directory('${root.path}/thumbs')..createSync(),

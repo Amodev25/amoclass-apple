@@ -439,11 +439,22 @@ class LibraryService {
     return false;
   }
 
-  /// Remove an item from the library (doesn't delete the file)
+  /// Removes an item from the library and deletes its file from this device.
+  ///
+  /// Only a file inside this course's own folder is deleted: that is the copy
+  /// import made, which the student cannot reach any other way, so leaving it
+  /// behind only wasted space. A file anywhere else is never touched.
   static Future<void> removeVideo(String filePath) async {
     _items.removeWhere((v) => v.filePath == filePath);
     await _saveLibrary();
     await thumbnails.remove(ThumbnailStore.idFor('l', filePath));
+    try {
+      final appData = await _getAppDataPath();
+      if (filePath.startsWith('$appData/')) {
+        final file = File(filePath);
+        if (await file.exists()) await file.delete();
+      }
+    } catch (_) {}
   }
 
   // ────────────── Query ──────────────────────────────────────

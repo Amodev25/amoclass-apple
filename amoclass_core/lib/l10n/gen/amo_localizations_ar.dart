@@ -280,7 +280,7 @@ class AmoL10nAr extends AmoL10n {
 
   @override
   String libraryRemoveBody(String name) {
-    return 'إزالة \"$name\" من المكتبة؟\n(لن يُحذف الملف نفسه)';
+    return 'إزالة \"$name\" من المكتبة؟\nسيُحذف الملف من هذا الجهاز.';
   }
 
   @override

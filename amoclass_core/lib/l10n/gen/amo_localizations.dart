@@ -484,7 +484,7 @@ abstract class AmoL10n {
   /// No description provided for @libraryRemoveBody.
   ///
   /// In en, this message translates to:
-  /// **'Remove \"{name}\" from library?\n(The file won\'t be deleted)'**
+  /// **'Remove \"{name}\" from the library?\nThe file will be deleted from this device.'**
   String libraryRemoveBody(String name);
 
   /// No description provided for @libraryNotEnoughSpaceTitle.
