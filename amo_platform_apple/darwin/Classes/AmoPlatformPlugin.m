@@ -146,7 +146,9 @@ static NSString *AmoSha256Hex(NSString *input) {
       return;
     }
     int ret = amo_register_protocol((int64_t)[handle longLongValue]);
-    result(@(ret == 0));
+    /* numberWithBool, not @(ret == 0): a C comparison is an int, which the
+       channel sends as an int and Dart's invokeMethod<bool> refuses. */
+    result([NSNumber numberWithBool:(ret == 0)]);
   } else if ([m isEqualToString:@"setContentKey"]) {
     NSString *contentKey = AmoArg(call, @"contentKey", [NSString class]);
     if (contentKey == nil) {
@@ -156,7 +158,7 @@ static NSString *AmoSha256Hex(NSString *input) {
       return;
     }
     int ok = amo_apple_set_content_key([contentKey UTF8String]);
-    result(@(ok == 1));
+    result([NSNumber numberWithBool:(ok == 1)]);
   } else if ([m isEqualToString:@"clearContentKey"]) {
     amo_apple_clear_content_key();
     result(nil);

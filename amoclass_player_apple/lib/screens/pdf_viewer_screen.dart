@@ -24,9 +24,16 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   final PdfViewerController _pdfViewerController = PdfViewerController();
 
+  bool _loadStarted = false;
+
+  // Started here, not in initState: _decryptAndLoad reads AmoL10n.of(context)
+  // before its first await, and an inherited-widget lookup during initState
+  // throws (debug builds), which left the screen stuck on an uncaught error.
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_loadStarted) return;
+    _loadStarted = true;
     _decryptAndLoad();
   }
 

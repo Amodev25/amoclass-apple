@@ -1,34 +1,33 @@
-/// Extensions hidden from the names a student sees. Only known media and
-/// container suffixes are stripped, so a title with a dot of its own
-/// ("Lesson 1.2") keeps it.
+/// Media and container extensions a student never needs to see.
 const Set<String> _hiddenExtensions = {
-  '.amo',
-  '.mp4',
-  '.m4v',
-  '.mov',
-  '.mkv',
-  '.webm',
-  '.avi',
-  '.wmv',
-  '.flv',
-  '.3gp',
-  '.mpg',
-  '.mpeg',
-  '.pdf',
+  '.amo', '.mp4', '.m4v', '.mov', '.mkv', '.webm', '.avi', '.wmv', '.flv',
+  '.3gp', '.mpg', '.mpeg', '.pdf',
 };
 
-/// The name shown to the student for a lesson file: [fileName] without its
-/// known extensions, stripped repeatedly so `lesson.mp4.amo` becomes `lesson`.
-///
-/// Display only. Progress keys, download paths, catalogue lookups and server
-/// calls must keep using the full file name.
+/// A teacher-chosen course extension (`.nhb`, `.omc`): starts with a letter,
+/// two to five characters. The Encryptor names every file `<name>.<ext>`, and
+/// the apps are not told the course's extension, so it is recognised by shape.
+/// A digit-led tail (`Lesson 1.2`) is part of the title and stays.
+final RegExp _courseExtension = RegExp(r'^\.[A-Za-z][A-Za-z0-9]{1,4}$');
+
+/// [fileName] as the student sees it: known media extensions removed, plus a
+/// single course extension at the end. Display only — keep the full name for
+/// keys, lookups, search and storage.
 String displayFileName(String fileName) {
   var name = fileName;
+  var courseExtStripped = false;
   while (true) {
     final dot = name.lastIndexOf('.');
     if (dot <= 0) break;
-    if (!_hiddenExtensions.contains(name.substring(dot).toLowerCase())) break;
-    name = name.substring(0, dot);
+    final ext = name.substring(dot);
+    if (_hiddenExtensions.contains(ext.toLowerCase())) {
+      name = name.substring(0, dot);
+    } else if (!courseExtStripped && _courseExtension.hasMatch(ext)) {
+      courseExtStripped = true;
+      name = name.substring(0, dot);
+    } else {
+      break;
+    }
   }
   name = name.trim();
   return name.isEmpty ? fileName : name;

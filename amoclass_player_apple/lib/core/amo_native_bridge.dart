@@ -9,6 +9,13 @@ import 'package:media_kit/media_kit.dart';
 class AmoNativeBridge {
   static const _channel = MethodChannel('com.lockclass/amo_stream');
 
+  /// A native yes/no read leniently. Objective-C boxes a C comparison
+  /// (`@(ret == 0)`) as an int, which the channel delivers as 1/0; a strict
+  /// `invokeMethod<bool>` threw on that and turned a stored key into "no key".
+  @visibleForTesting
+  static bool channelBool(Object? value) =>
+      value == true || (value is num && value != 0);
+
   /// Register the amo:// protocol with the current mpv player instance.
   /// Must be called after Player() is created but before opening media.
   static Future<bool> registerProtocol(Player player) async {
@@ -17,13 +24,13 @@ class AmoNativeBridge {
       if (platform is NativePlayer) {
         final mpvHandle = await platform.handle;
 
-        final result = await _channel.invokeMethod<bool>('registerProtocol', {
+        final result = await _channel.invokeMethod<Object?>('registerProtocol', {
           'mpvHandle': mpvHandle,
         });
         if (kDebugMode) {
           debugPrint('[AmoNativeBridge] registerProtocol: $result');
         }
-        return result ?? false;
+        return channelBool(result);
       }
       if (kDebugMode) {
         debugPrint('[AmoNativeBridge] platform is not NativePlayer');
@@ -45,10 +52,10 @@ class AmoNativeBridge {
   /// playback on a false.
   static Future<bool> setContentKey(String contentKey) async {
     try {
-      final ok = await _channel.invokeMethod<bool>('setContentKey', {
+      final ok = await _channel.invokeMethod<Object?>('setContentKey', {
         'contentKey': contentKey,
       });
-      return ok ?? false;
+      return channelBool(ok);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[AmoNativeBridge] setContentKey error: $e');

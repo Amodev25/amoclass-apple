@@ -13,10 +13,18 @@ void main() {
     expect(displayFileName('sheet.pdf.amo'), 'sheet');
   });
 
+  test('strips a teacher-chosen course extension', () {
+    expect(displayFileName('3.nhb'), '3');
+    expect(displayFileName('Lecture 4.OMC'), 'Lecture 4');
+    expect(displayFileName('notes.pdf.nhb'), 'notes');
+  });
+
   test('keeps dots that are part of the title', () {
     expect(displayFileName('Lesson 1.2'), 'Lesson 1.2');
     expect(displayFileName('Lesson 1.2.mp4'), 'Lesson 1.2');
-    expect(displayFileName('v2.final.docx'), 'v2.final.docx');
+    expect(displayFileName('Ch 3.10.nhb'), 'Ch 3.10');
+    // Only ONE course-style extension goes; the rest of the title stays.
+    expect(displayFileName('v2.final.docx'), 'v2.final');
   });
 
   test('never returns an empty name', () {
