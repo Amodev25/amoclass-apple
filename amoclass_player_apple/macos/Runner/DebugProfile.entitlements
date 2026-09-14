@@ -2,18 +2,25 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Kept in step with Release.entitlements; see the note there for why the
-	     sandbox is off. Debug additionally needs JIT for the Dart VM and a
-	     local server socket for `flutter attach` and hot reload. -->
+	<!-- Kept in step with Release.entitlements (see the note there for why each
+	     shared key exists). Debug and Profile builds also need the last two keys;
+	     Release must not carry them. -->
 	<key>com.apple.security.app-sandbox</key>
-	<false/>
+	<true/>
 
 	<key>com.apple.security.network.client</key>
 	<true/>
 
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+
+	<!-- Debug only: JIT for the Dart VM. -->
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
 
+	<!-- Debug/Profile only: the Dart VM service listens on 127.0.0.1 for
+	     `flutter attach`, hot reload and DevTools. The sandbox blocks that
+	     listener without this key. The app itself opens no server socket. -->
 	<key>com.apple.security.network.server</key>
 	<true/>
 </dict>

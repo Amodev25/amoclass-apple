@@ -83,6 +83,40 @@ jobs:
         working-directory: amoclass_player_apple
         run: flutter build macos --debug
 
+      # The Mac App Store requires the App Sandbox. Fail if it is off, both in
+      # the source entitlements (Release is never built here) and in what was
+      # actually signed into the debug app. The debug build is ad-hoc signed
+      # ("-"), which still embeds entitlements; if a toolchain change ever
+      # stops that, fall back to the DebugProfile source file rather than
+      # passing silently.
+      - name: Verify the App Sandbox is on
+        working-directory: amoclass_player_apple
+        run: |
+          set -euo pipefail
+          sandbox_on() { [ "$(plutil -extract com.apple.security.app-sandbox raw -o - "$1" 2>/dev/null)" = "true" ]; }
+
+          for f in macos/Runner/Release.entitlements macos/Runner/DebugProfile.entitlements; do
+            plutil -lint "$f"
+            if sandbox_on "$f"; then echo "✅ $f: app-sandbox = true"; else echo "🔴 $f: app-sandbox is not true" >&2; exit 1; fi
+          done
+
+          APP=$(find build/macos/Build/Products/Debug -maxdepth 1 -name '*.app' | head -1)
+          test -n "$APP"
+          codesign -d --entitlements :- "$APP" > signed.entitlements 2>/dev/null || true
+          if [ -s signed.entitlements ] && plutil -lint signed.entitlements >/dev/null 2>&1; then
+            echo "──── entitlements signed into $APP ────"
+            cat signed.entitlements
+            if sandbox_on signed.entitlements; then
+              echo "✅ signed app: app-sandbox = true"
+            else
+              echo "🔴 the signed app does not carry app-sandbox = true" >&2
+              exit 1
+            fi
+          else
+            echo "⚠️ no entitlements embedded in $APP (unsigned build); checked the source files only"
+          fi
+          rm -f signed.entitlements
+
       - name: Verify the native decryptor linked in
         working-directory: amoclass_player_apple
         env:

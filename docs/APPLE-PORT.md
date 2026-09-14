@@ -249,7 +249,7 @@ dyld: Library not loaded: @rpath/Ass.framework/Ass
 |---|---|
 | `AntiCapture.isSupported()` ترجع **false على iOS** | iOS **لا يملك** مقابلًا لـ FLAG_SECURE. المتاح هو الكشف عبر `UIScreen.isCaptured` ثم تغطية النافذة. هذا تخفيف لا منع، والواجهة يجب ألا تَعِد الطالب بما لا تستطيع. |
 | **لا يوجد وضع تركيز** على iOS ولا macOS | أزاله المالك بالكامل في 2026-09-14: لا قفل داخل التطبيق، لا كتم للإشعارات، لا Guided Access، لا خيارات kiosk على الماك، لا استراحة طوارئ ولا مؤقت جلسة. لا تُعِده. |
-| `app-sandbox = false` على macOS | أُطفئ أصلًا من أجل وضع التركيز، وهذا السبب لم يعد قائمًا بعد إزالته. لم يُعَد تشغيله لأن التطبيق لم يُختبر داخل صندوق الرمل (يحتاج على الأقل `files.user-selected.read-only` لمنتقي الملفات). **الثمن الحالي: لا Mac App Store.** خطة التوزيع هي DMG. |
+| `app-sandbox = true` على macOS (منذ 2026-09-14) | شرط لـ Mac App Store. كان مطفأً فقط من أجل وضع التركيز، وقد أُزيل. الصلاحيات **الدنيا** وسبب كلٍّ منها في القسم ١٢. لا تُضِف كاميرا أو مايك أو USB أو مجلد التنزيلات أو `network.server` في Release بلا سبب في الكود. **لم يُجرَّب على ماك حقيقي بعد** (انظر القسم ١٢). |
 | **لا روابط شراء أو تسجيل داخل التطبيق** | يحافظ على تصنيف "Reader App" لدى آبل ← بلا مشتريات داخلية وبلا عمولة ٣٠٪. إضافة رابط شراء واحد تُسقط هذا التصنيف. |
 | `ios` و `macos` قيمتان منفصلتان لا `apple` واحدة | مقعد مقيَّد بـ "آبل" يسمح للطالب بالمشاهدة على الآيفون **وعلى** الماك بترخيص واحد. |
 | لا `CFBundleDocumentTypes` ولا `UTExportedTypeDeclarations` في `Info.plist` | الحاوية تُعرَّف ببصمة البايتات (`AMOENC01`) لا باسمها، والمدرّس يختار الامتداد بحرية. و iOS يوجّه الملفات للتطبيقات بالامتداد/UTI، فأي إعلان هنا سيغطي امتدادًا واحدًا فقط ويجعل "افتح بـ Lockclass" تظهر ثم تفشل مع باقي الملفات. الاستيراد يمر بمنتقي الملفات داخل التطبيق (`FileType.any`) وهو بلا هذا القيد. |
@@ -294,6 +294,7 @@ flutter: media_kit: NativeReferenceHolder: Allocated 36652265472
 - تشغيل درس مشفّر
 - `NSWindowSharingNone` (منع التصوير)
 - اختصارات الكيبورد والزووم
+- **العمل داخل صندوق الرمل** (استيراد، تنزيل، تشغيل، بقاء الجلسة في الـ Keychain بعد إعادة الفتح) — القائمة كاملة في القسم ١٢. الـ CI يثبت فقط أن المفتاح مفعّل وأن التطبيق يُقلع مع صندوق الرمل.
 
 وقيد إضافي: رنر GitHub معماريته **arm64**، فنسخة debug تُبنى للمعمارية المضيفة وحدها. أي أن ما ثبت هو **Apple Silicon**، أما أجهزة Intel فلم تُختبر.
 
@@ -388,3 +389,39 @@ cd apps && git add -A && git commit -m "..." && git push origin main
 - اسم القائمة على macOS صار Lockclass.
 - (2026-09-14) أُزيل وضع التركيز بالكامل بقرار المالك، ومعه اعتماد `window_manager` وقناة `com.lockclass/focus_mode`.
 - شارة "تسجيل الشاشة ممنوع" لا تظهر إلا إذا كانت الحماية مفعّلة فعلًا.
+
+---
+
+## ١٢. صندوق الرمل على macOS — 2026-09-14
+
+`com.apple.security.app-sandbox = true` في `DebugProfile.entitlements` و`Release.entitlements`. كل صلاحية أدناه لها سبب في الكود، ولا شيء غيرها.
+
+| الصلاحية | Release | Debug/Profile | السبب |
+|---|---|---|---|
+| `app-sandbox` | ✅ | ✅ | شرط Mac App Store. |
+| `network.client` | ✅ | ✅ | الـ Worker (دخول، verify-session، الكتالوج) وتنزيلات R2 والصور المصغّرة عبر dio. بدونها لا شبكة إطلاقًا. |
+| `files.user-selected.read-only` | ✅ | ✅ | منتقي الاستيراد (`file_picker` ← `NSOpenPanel`). قراءة فقط تكفي: التطبيق لا يكتب في مكان اختاره الطالب. **و`file_picker` يفحص هذا المفتاح بنفسه** (`SecTaskCopyValueForEntitlement`) ويرفض فتح النافذة بدونه حتى خارج صندوق الرمل — أي أن الاستيراد على الماك كان سيفشل بـ `ENTITLEMENT_NOT_FOUND` قبل هذا التغيير. |
+| `cs.allow-jit` | — | ✅ | آلة Dart في وضع JIT. |
+| `network.server` | — | ✅ | خدمة Dart VM على 127.0.0.1 (`flutter attach`، hot reload، DevTools). **لا يوجد في Release** لأن التطبيق لا يفتح أي socket: الفيديو يمر عبر بروتوكول `amo://` داخل mpv نفسه، لا عبر خادم محلي. |
+
+**مسار الاستيراد — لا يحتاج security-scoped bookmarks.** `LibraryService.addVideo` ينسخ الملف المختار إلى `courses/<serverCode>/Videos|Documents` داخل الحاوية **أثناء** صلاحية النافذة، والمكتبة تفتح النسخة فقط بعد ذلك. لا يُحفظ أي مسار خارجي بين مرات الفتح. على الماك `isPickerCopy` ترجع false، فالملف الأصلي لا يُحذف أبدًا.
+
+**فحص ما قد ينكسر**
+- المسارات: كلها من `path_provider` (Application Support / Documents / `Directory.systemTemp`)، وكلها تصير داخل الحاوية تلقائيًا. لا مسارات ثابتة (`~/` أو `/Users` أو `/tmp` أو `/Library`) في Dart ولا في الإضافة. ‏`dlopen` في `amo_stream_apple.c` بأسماء نسبية فقط، والمسار الأساسي `dlsym(RTLD_DEFAULT)`.
+- الـ Keychain: `usesDataProtectionKeychain: false` ← login keychain الملفي، وهو مسموح داخل صندوق الرمل. الـ Data Protection keychain يحتاج `keychain-access-groups` وTeam ID غير متوفرين. معرّف الجهاز في الإضافة يستخدم نفس الـ keychain (بلا access group). ملاحظة: التوقيع ad-hoc يتغير مع كل بناء، فقد لا يُقرأ عنصر قديم؛ الإضافة عندها ترجع hash الـ IOPlatformUUID نفسه، فالمعرّف ثابت.
+- معرّف الجهاز: `IOServiceGetMatchingService("IOPlatformExpertDevice")` + `IORegistryEntryCreateCFProperty("IOPlatformUUID")` — قراءة IOKit مسموحة.
+- كشف السماعات: CoreAudio (`AudioObjectGetPropertyData` على جهاز الإخراج الافتراضي) — قراءة خصائص فقط، بلا مايك.
+- `NSWindowSharingNone`: خاصية نافذة، لا تتأثر.
+- المساحة الحرة واستثناء النسخ الاحتياطي: `NSURLVolumeAvailableCapacityForImportantUsageKey` و`NSURLIsExcludedFromBackupKey` على مسارات الحاوية — مسموحان.
+- الإضافات: media_kit/libmpv (ملفات محلية + CoreAudio + VideoToolbox؛ لا config خارجي على الماك)، `file_picker` (NSOpenPanel)، `flutter_secure_storage`، `pdfx`/Syncfusion (PDF من الذاكرة، الروابط معطّلة)، `wakelock_plus` (IOPMAssertion)، `device_info_plus`/`package_info_plus` (قراءات النظام والحزمة)، `url_launcher_macos` (تابع لـ Syncfusion، غير مستخدم). لا `NSTask`/`Process`، ولا Apple Events، ولا قراءة بيانات تطبيقات أخرى.
+- البيانات القديمة: كل شيء صار في `~/Library/Containers/com.lockclass.player/`. ما كتبته نسخ سابقة بلا صندوق رمل في `~/Library/Application Support` لن يظهر (بيانات اختبار؛ مقبول). عناصر الـ keychain ليست داخل الحاوية.
+
+**الـ CI**: خطوة `Verify the App Sandbox is on` بعد بناء macOS تفحص ملفي الصلاحيات بـ `plutil`، ثم الصلاحيات الموقّعة فعلًا داخل التطبيق بـ `codesign -d --entitlements :-`، وتفشل إن لم يكن `app-sandbox = true`. واختبار الإقلاع الموجود صار يُقلع التطبيق **داخل** صندوق الرمل.
+
+**يجب اختباره على ماك حقيقي قبل أي رفع**
+1. الاستيراد: اختيار ملف من Downloads/Desktop وقرص خارجي → ينسخ ويظهر في المكتبة؛ ويبقى يعمل بعد إغلاق التطبيق وفتحه (أي أن الملف يُقرأ من الحاوية).
+2. التنزيل من المكتبة الأونلاين، وظهور الصورة المصغّرة، وفحص المساحة.
+3. تشغيل فيديو مشفّر (مستورد ومنزّل) بصورة وصوت، وفتح PDF.
+4. تسجيل الدخول ثم إغلاق التطبيق وفتحه: الجلسة باقية بلا طلب دخول، ومعرّف الجهاز لم يتغير (لا ربط مقعد جديد).
+5. `NSWindowSharingNone` وكشف السماعات ما زالا يعملان.
+6. نسخة Release موقّعة: `codesign -d --entitlements :-` تُظهر المفاتيح الثلاثة فقط.

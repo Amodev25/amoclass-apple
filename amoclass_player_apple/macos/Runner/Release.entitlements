@@ -3,25 +3,35 @@
 <plist version="1.0">
 <dict>
 	<!--
-	  The App Sandbox is OFF.
+	  The App Sandbox is ON (2026-09-14). The Mac App Store requires it. It was
+	  only ever off for Focus Mode's kiosk presentation options, and the owner
+	  removed Focus Mode on 2026-09-14.
 
-	  It was turned off for Focus Mode, whose kiosk presentation options the
-	  sandbox blocks. The owner removed Focus Mode on 2026-09-14, so that reason
-	  no longer exists; the key has not been flipped back yet because nothing
-	  has been tested sandboxed. Turning it on needs, at least,
-	  com.apple.security.files.user-selected.read-only for the import picker,
-	  and a check of everything else the app does (keychain, IOKit device id,
-	  mpv). It is also what the Mac App Store requires. macOS currently ships as a Developer ID signed, notarised
-	  DMG straight from the site.
+	  Keep this list minimal: every key below has a concrete reason in the code.
+	  Do not add camera, microphone, USB, Downloads-folder or network.server
+	  without one. Nothing in the app listens on a socket: video plays through
+	  the in-process amo:// mpv protocol, not a local HTTP server.
 
-	  With no sandbox there is no need for files.user-selected entitlements
-	  — reading the student's lesson files is unrestricted.
+	  Sandboxed, all app data lives in ~/Library/Containers/com.lockclass.player/.
+	  Anything an earlier unsandboxed build wrote to ~/Library/Application Support
+	  is not visible any more (test data only; accepted).
 	-->
 	<key>com.apple.security.app-sandbox</key>
-	<false/>
+	<true/>
 
-	<!-- Login, licence verification and the online library all call the API. -->
+	<!-- Outbound HTTPS: login, verify-session, the online catalogue, R2
+	     downloads and thumbnails (dio). A sandboxed app has no network without it. -->
 	<key>com.apple.security.network.client</key>
+	<true/>
+
+	<!-- The import picker (file_picker -> NSOpenPanel). Read-only is enough:
+	     LibraryService.addVideo copies the picked file into the container while
+	     the panel's grant is still live, and the library only ever reopens that
+	     copy, so no security-scoped bookmark is needed. The app never writes to a
+	     picked location. file_picker also checks for this key itself
+	     (SecTaskCopyValueForEntitlement) and refuses to open the panel without it,
+	     sandbox or not. -->
+	<key>com.apple.security.files.user-selected.read-only</key>
 	<true/>
 </dict>
 </plist>

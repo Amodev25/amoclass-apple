@@ -8,11 +8,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 ///   would otherwise carry this device's seat binding with it.
 ///
 /// * **macOS** — `usesDataProtectionKeychain: false`. The data-protection
-///   keychain needs a keychain-access-group entitlement, i.e. a signed app
-///   with a team id; this app is not sandboxed and is built without one, and
-///   every call there fails with -34018 (errSecMissingEntitlement). The
-///   file-based login keychain works without it. The same this-device
-///   accessibility is passed for parity.
+///   keychain needs a keychain-access-groups entitlement, i.e. a signed app
+///   with a team id; the app is built without one, and every call there
+///   fails with -34018 (errSecMissingEntitlement). The file-based login
+///   keychain works without it, sandboxed too (the sandbox has been on since
+///   2026-09-14). The same this-device accessibility is passed for parity.
 class AppSecureStorage {
   const AppSecureStorage._();
 
