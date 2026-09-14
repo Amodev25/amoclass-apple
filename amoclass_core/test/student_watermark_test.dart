@@ -41,23 +41,57 @@ void main() {
     expect(ignore.ignoring, isTrue);
   });
 
-  testWidgets('moves to a new spot every interval', (tester) async {
+  testWidgets('keeps moving and never stops', (tester) async {
     await tester.pumpWidget(
-      _host(
-        const StudentWatermark(
-          name: 'Sara',
-          password: 'x',
-          interval: Duration(seconds: 5),
-        ),
-      ),
+      _host(const StudentWatermark(name: 'Sara', password: 'x')),
     );
     Alignment current() => tester
-        .widget<AnimatedAlign>(find.byType(AnimatedAlign))
+        .widget<Align>(
+          find.ancestor(of: find.text('Sara'), matching: find.byType(Align)).first,
+        )
         .alignment as Alignment;
+
+    // Every half second for two minutes — past several edge bounces — the mark
+    // is somewhere new and still inside the frame.
+    var previous = current();
+    for (var i = 0; i < 240; i++) {
+      await tester.pump(const Duration(milliseconds: 500));
+      final now = current();
+      expect(now, isNot(previous), reason: 'stopped at step $i');
+      expect(now.x.abs(), lessThanOrEqualTo(0.85));
+      expect(now.y.abs(), lessThanOrEqualTo(0.85));
+      previous = now;
+    }
+    // Removing the widget disposes its ticker (a live ticker fails the test).
+    await tester.pumpWidget(_host(const SizedBox()));
+  });
+
+  testWidgets('moves at a calm speed, not in jumps', (tester) async {
+    await tester.pumpWidget(
+      _host(const StudentWatermark(name: 'Sara', password: 'x')),
+    );
+    Alignment current() => tester
+        .widget<Align>(
+          find.ancestor(of: find.text('Sara'), matching: find.byType(Align)).first,
+        )
+        .alignment as Alignment;
+    // One 60 fps frame moves it a sliver: 1.7 of alignment per 13 s at most.
     final before = current();
-    await tester.pump(const Duration(seconds: 5));
-    expect(current(), isNot(before));
-    // Removing the widget cancels its timer (a leaked timer fails the test).
+    await tester.pump(const Duration(milliseconds: 16));
+    final after = current();
+    expect((after.x - before.x).abs(), lessThan(0.01));
+    expect((after.y - before.y).abs(), lessThan(0.01));
+    await tester.pumpWidget(_host(const SizedBox()));
+  });
+
+  testWidgets('the mark is clearly visible', (tester) async {
+    await tester.pumpWidget(
+      _host(const StudentWatermark(name: 'Sara', password: 'x')),
+    );
+    final opacity = tester.widget<Opacity>(
+      find.ancestor(of: find.text('Sara'), matching: find.byType(Opacity)).first,
+    );
+    expect(opacity.opacity, greaterThanOrEqualTo(0.8));
     await tester.pumpWidget(_host(const SizedBox()));
   });
 }
