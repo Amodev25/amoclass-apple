@@ -279,12 +279,23 @@ jobs:
           ROOT: build/ios/iphonesimulator
         run: bash ../scripts/verify_native_symbols.sh "$ROOT"
 
+      # Zipped with ditto so the executable bit survives upload-artifact. This
+      # zip is also what browser simulators (e.g. Appetize) accept: upload it
+      # as-is, platform iOS.
+      - name: Package iOS simulator app
+        if: success()
+        working-directory: amoclass_player_apple/build/ios/iphonesimulator
+        run: |
+          APP=$(find . -maxdepth 1 -name '*.app' | head -1)
+          test -n "$APP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" Lockclass-ios-simulator.zip
+
       - name: Upload iOS app
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: lockclass-ios-simulator-app
-          path: amoclass_player_apple/build/ios/iphonesimulator/*.app
+          path: amoclass_player_apple/build/ios/iphonesimulator/Lockclass-ios-simulator.zip
           retention-days: 7
           if-no-files-found: error
 
