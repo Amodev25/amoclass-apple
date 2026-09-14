@@ -127,12 +127,41 @@ jobs:
 
       # Uploaded BEFORE the smoke test on purpose: if the app turns out not to
       # launch, the thing you need in order to debug that is the app itself.
+      #
+      # Zipped with ditto first: upload-artifact does not keep symlinks or the
+      # executable bit, and a .app whose framework symlinks became copies fails
+      # its code signature and will not open. Unzip the inner zip on the Mac.
+      - name: Package macOS app (debug)
+        if: success()
+        working-directory: amoclass_player_apple/build/macos/Build/Products/Debug
+        run: ditto -c -k --sequesterRsrc --keepParent Lockclass.app Lockclass-macos-debug.zip
+
       - name: Upload macOS app
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: lockclass-macos-debug-app
-          path: amoclass_player_apple/build/macos/Build/Products/Debug/*.app
+          path: amoclass_player_apple/build/macos/Build/Products/Debug/Lockclass-macos-debug.zip
+          retention-days: 7
+          if-no-files-found: error
+
+      # A release build for hands-on testing: AOT-compiled (the debug build runs
+      # the Dart VM in JIT mode) and signed with Release.entitlements, the three
+      # keys that will ship. Ad-hoc signed, not notarized: open it with
+      # right-click > Open the first time.
+      - name: Build macOS app (release)
+        working-directory: amoclass_player_apple
+        run: |
+          flutter build macos --release
+          cd build/macos/Build/Products/Release
+          codesign -d --entitlements :- Lockclass.app 2>/dev/null || true
+          ditto -c -k --sequesterRsrc --keepParent Lockclass.app Lockclass-macos-release.zip
+
+      - name: Upload macOS app (release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: lockclass-macos-release-app
+          path: amoclass_player_apple/build/macos/Build/Products/Release/Lockclass-macos-release.zip
           retention-days: 7
           if-no-files-found: error
 
