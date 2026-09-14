@@ -17,6 +17,10 @@ class RemoteFile {
   final String folderPath;
   final int fileSize;
   final String contentType;
+
+  /// 'video' or 'pdf', from the catalogue's `kind` (read from the file header
+  /// when it was uploaded). Rows cached before the field existed read 'video'.
+  final String kind;
   final bool isActive;
   final String uploadedAt;
 
@@ -26,6 +30,7 @@ class RemoteFile {
     required this.folderPath,
     required this.fileSize,
     required this.contentType,
+    this.kind = 'video',
     required this.isActive,
     required this.uploadedAt,
   });
@@ -36,6 +41,7 @@ class RemoteFile {
     folderPath: (j['folder_path'] as String?) ?? '',
     fileSize: (j['file_size'] as num?)?.toInt() ?? 0,
     contentType: j['content_type'] as String? ?? 'application/octet-stream',
+    kind: j['kind'] as String? ?? 'video',
     isActive: ((j['is_active'] as num?)?.toInt() ?? 1) == 1,
     uploadedAt: j['uploaded_at'] as String? ?? '',
   );
@@ -46,6 +52,7 @@ class RemoteFile {
     'folder_path': folderPath,
     'file_size': fileSize,
     'content_type': contentType,
+    'kind': kind,
     'is_active': isActive ? 1 : 0,
     'uploaded_at': uploadedAt,
   };
@@ -63,6 +70,18 @@ class RemoteFile {
       'avi',
       'mov',
     ].contains(ext);
+  }
+
+  /// Whether this file is a PDF lesson. The catalogue's [kind] decides; a PDF
+  /// content type or a `.pdf` name (`notes.pdf`, `notes.pdf.amo`) also counts,
+  /// for rows the server sent before it knew the kind.
+  bool get isPdf {
+    if (kind == 'pdf') return true;
+    if (contentType.toLowerCase().contains('pdf')) return true;
+    final parts = displayName.toLowerCase().split('.');
+    if (parts.length < 2) return false;
+    if (parts.last == 'pdf') return true;
+    return parts.length >= 3 && parts[parts.length - 2] == 'pdf';
   }
 
   String get sizeLabel {

@@ -10,6 +10,7 @@ export 'core/amo_exceptions.dart';
 export 'models/video_item.dart';
 export 'core/app_colors.dart';
 export 'core/server_errors.dart';
+export 'core/display_name.dart';
 export 'l10n/gen/amo_localizations.dart';
 export 'services/locale_service.dart';
 export 'widgets/language_toggle.dart';

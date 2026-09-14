@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/session_service.dart';
 import 'course_select_screen.dart';
 import 'package:amo_core/amo_core.dart';
+import '../core/platform_ui.dart';
 import '../services/course_files_service.dart';
 import '../widgets/course_files_prompt.dart';
 
@@ -168,9 +169,39 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
+  /// Whether the student can leave this screen without signing in: only when
+  /// it was opened to ADD a course and other courses are already signed in.
+  /// Never on a first login, after a sign-out, or with an empty session —
+  /// there is nothing behind the screen to go back to.
+  bool get _canGoBack =>
+      widget.isAddingCourse && AuthService.courses.isNotEmpty;
+
+  /// Back to the course list. Course select pushes this screen, so normally
+  /// that is a pop; if the route underneath is gone, rebuild the list instead.
+  Future<void> _backToCourses() async {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    final storedCourses = await SessionService.getStoredCourses();
+    if (!mounted || storedCourses.isEmpty) return;
+    navigator.pushAndRemoveUntil(
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) =>
+            CourseSelectScreen(storedCourses: storedCourses),
+        transitionsBuilder: (_, anim, _, child) =>
+            FadeTransition(opacity: anim, child: child),
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final canGoBack = _canGoBack;
+    Widget screen = Scaffold(
       backgroundColor: AppColors.scaffoldBg,
       body: Stack(
         children: [
@@ -189,9 +220,39 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
           ),
+          if (canGoBack)
+            SafeArea(
+              child: Align(
+                alignment: AlignmentDirectional.topStart,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  // Icons.adaptive: a back chevron on iOS and macOS, mirrored
+                  // under RTL. macOS has no system back, so this is the way out.
+                  child: IconButton(
+                    onPressed: _backToCourses,
+                    tooltip: AmoL10n.of(context).verifyBackToCourses,
+                    icon: Icon(Icons.adaptive.arrow_back, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
+
+    // Esc leaves, like Esc leaves the player — desktop only, as there.
+    if (canGoBack && PlatformUi.supportsPointerAndKeyboard) {
+      screen = CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): _backToCourses,
+        },
+        child: Focus(autofocus: true, child: screen),
+      );
+    }
+
+    // Blocks the iOS swipe-back (and any system pop) unless there is a course
+    // list to return to.
+    return PopScope(canPop: canGoBack, child: screen);
   }
 
   // ── Background glows ────────────────────────────────────────────────────────
@@ -257,7 +318,11 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                       ],
                     ),
-                    child: const LockMark(size: 36, color: Colors.white, weight: 7.4),
+                    child: const LockMark(
+                      size: 36,
+                      color: Colors.white,
+                      weight: 7.4,
+                    ),
                   ),
                 ),
               ],

@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../core/display_name.dart';
+
 /// Represents a media item (video or PDF) in the library
 class VideoItem {
   final String filePath;
@@ -26,6 +28,10 @@ class VideoItem {
 
   bool get isPdf => contentType == 'pdf';
   bool get isVideo => contentType == 'video';
+
+  /// [name] as the student sees it, without known extensions. Display only:
+  /// keep using [name] and [filePath] for keys, lookups and storage.
+  String get displayName => displayFileName(name);
 
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{

@@ -20,7 +20,7 @@ class StudentWatermark extends StatefulWidget {
     required this.name,
     this.password,
     this.interval = const Duration(seconds: 25),
-    this.opacity = 0.32,
+    this.opacity = 0.45,
   });
 
   final String name;
@@ -85,17 +85,26 @@ class _StudentWatermarkState extends State<StudentWatermark> {
     final password = widget.password?.trim() ?? '';
     final media = MediaQuery.maybeOf(context);
     final shortest = media?.size.shortestSide ?? 400;
-    final fontSize = (shortest * 0.03).clamp(11.0, 22.0);
+    final fontSize = (shortest * 0.021).clamp(10.0, 16.0);
     final style = TextStyle(
-      color: const Color(0xFFFFFFFF),
+      color: const Color(0xFF000000),
       fontSize: fontSize,
-      fontWeight: FontWeight.w600,
+      fontWeight: FontWeight.w700,
       height: 1.25,
       decoration: TextDecoration.none,
-      // A dark halo keeps the white text readable on a white slide.
+      // Black text with a thin white outline (owner, 2026-09-14): lessons move
+      // between dark video and white slides, and neither colour alone reads on
+      // both. The outline is eight crisp shadows rather than a second stroked
+      // Text, so each line stays one widget.
       shadows: const [
-        Shadow(color: Color(0xCC000000), blurRadius: 3),
-        Shadow(color: Color(0x99000000), offset: Offset(1, 1)),
+        Shadow(color: Color(0xFFFFFFFF), offset: Offset(-1, -1)),
+        Shadow(color: Color(0xFFFFFFFF), offset: Offset(0, -1)),
+        Shadow(color: Color(0xFFFFFFFF), offset: Offset(1, -1)),
+        Shadow(color: Color(0xFFFFFFFF), offset: Offset(-1, 0)),
+        Shadow(color: Color(0xFFFFFFFF), offset: Offset(1, 0)),
+        Shadow(color: Color(0xFFFFFFFF), offset: Offset(-1, 1)),
+        Shadow(color: Color(0xFFFFFFFF), offset: Offset(0, 1)),
+        Shadow(color: Color(0xFFFFFFFF), offset: Offset(1, 1)),
       ],
     );
 

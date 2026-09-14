@@ -116,7 +116,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.document.name,
+              widget.document.displayName,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 14,

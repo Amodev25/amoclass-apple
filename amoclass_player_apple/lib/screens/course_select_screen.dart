@@ -1,4 +1,6 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
 import 'package:flutter/material.dart';
+import '../core/platform_ui.dart';
 import '../services/auth_service.dart';
 import '../services/session_service.dart';
 import '../services/library_service.dart';
@@ -92,11 +94,18 @@ class _CourseSelectScreenState extends State<CourseSelectScreen>
     );
   }
 
+  /// Pushed (not replaced), so the login screen's back control pops straight
+  /// back here. On iOS a Cupertino route, which gives the edge swipe-back.
   void _addAnotherCourse() {
+    const screen = LoginScreen(isAddingCourse: true);
+    if (PlatformUi.isMobile) {
+      Navigator.push(context, CupertinoPageRoute<void>(builder: (_) => screen));
+      return;
+    }
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (_, _, _) => const LoginScreen(isAddingCourse: true),
+        pageBuilder: (_, _, _) => screen,
         transitionsBuilder: (_, anim, _, child) => SlideTransition(
           position: Tween<Offset>(
             begin: const Offset(0, 0.08),

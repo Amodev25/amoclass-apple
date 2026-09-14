@@ -323,7 +323,7 @@ class _LibraryScreenState extends State<LibraryScreen>
 
       dlgSetState?.call(() {
         dlgIndex = i + 1;
-        dlgFileName = file.name;
+        dlgFileName = displayFileName(file.name);
         dlgProgress = 0.0;
       });
 
@@ -350,7 +350,7 @@ class _LibraryScreenState extends State<LibraryScreen>
               Navigator.of(context).pop();
             }
             setState(() => _isImporting = false);
-            _showNotYourCourseDialog(file.name);
+            _showNotYourCourseDialog(displayFileName(file.name));
             unawaited(_clearPickerCopies());
             return;
           }
@@ -754,11 +754,13 @@ class _LibraryScreenState extends State<LibraryScreen>
     final currentIdx = videoItems.indexOf(video);
     final List<String> playlistNames;
     final List<String> playlistPaths;
+    // Names are display only (the player's title and "up next"); the paths
+    // carry identity and the progress key.
     if (currentIdx >= 0) {
-      playlistNames = videoItems.map((v) => v.name).toList();
+      playlistNames = videoItems.map((v) => v.displayName).toList();
       playlistPaths = videoItems.map((v) => v.filePath).toList();
     } else {
-      playlistNames = [video.name];
+      playlistNames = [video.displayName];
       playlistPaths = [video.filePath];
     }
 
@@ -769,7 +771,7 @@ class _LibraryScreenState extends State<LibraryScreen>
       MaterialPageRoute(
         builder: (_) => PlayerScreen(
           videoPath: videoPath,
-          videoName: video.name,
+          videoName: video.displayName,
           originalFilePath: video.filePath,
           playlistNames: playlistNames,
           playlistPaths: playlistPaths,
@@ -858,7 +860,7 @@ class _LibraryScreenState extends State<LibraryScreen>
           style: TextStyle(color: Colors.white),
         ),
         content: Text(
-          AmoL10n.of(context).libraryRemoveBody(video.name),
+          AmoL10n.of(context).libraryRemoveBody(video.displayName),
           style: const TextStyle(color: AppColors.mutedGray),
         ),
         actions: [
@@ -1576,7 +1578,9 @@ class _LibraryScreenState extends State<LibraryScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              AmoL10n.of(context).cloudDownloadedToLibrary(file.displayName),
+              AmoL10n.of(
+                context,
+              ).cloudDownloadedToLibrary(displayFileName(file.displayName)),
             ),
             backgroundColor: AppColors.onlineAccent,
             behavior: SnackBarBehavior.floating,
@@ -1988,9 +1992,23 @@ class _LibraryScreenState extends State<LibraryScreen>
             children: [
               Row(
                 children: [
-                  _RemoteThumbnail(
-                    file: file,
-                    fallbackEmoji: file.isVideo ? '🎬' : '📄',
+                  // A PDF's preview can look just like a video frame, so PDFs
+                  // (and only PDFs) carry a small corner badge.
+                  Stack(
+                    children: [
+                      _RemoteThumbnail(
+                        file: file,
+                        fallbackEmoji: file.isVideo && !file.isPdf
+                            ? '🎬'
+                            : '📄',
+                      ),
+                      if (file.isPdf)
+                        const PositionedDirectional(
+                          end: 2,
+                          bottom: 2,
+                          child: PdfBadge(),
+                        ),
+                    ],
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -1998,7 +2016,9 @@ class _LibraryScreenState extends State<LibraryScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          file.displayName,
+                          // RemoteFile.displayName is the full stored file
+                          // name (the catalogue's `display_name`).
+                          displayFileName(file.displayName),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 13,
@@ -2748,7 +2768,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          video.name,
+                          video.displayName,
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
@@ -2939,6 +2959,28 @@ class _RemoteThumbnailState extends State<_RemoteThumbnail> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(widget.fallbackEmoji, style: const TextStyle(fontSize: 22)),
+    );
+  }
+}
+
+// ── PDF badge (online tab) ──────────────────────────────────────────────────
+
+/// Small rounded chip marking a PDF on its thumbnail. Videos get none.
+class PdfBadge extends StatelessWidget {
+  const PdfBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: AppColors.pdfAccent,
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 3),
+        ],
+      ),
+      child: const Icon(Icons.picture_as_pdf, color: Colors.white, size: 11),
     );
   }
 }
