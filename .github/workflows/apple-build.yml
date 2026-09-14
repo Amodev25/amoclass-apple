@@ -93,7 +93,9 @@ jobs:
         working-directory: amoclass_player_apple
         run: |
           set -euo pipefail
-          sandbox_on() { [ "$(plutil -extract com.apple.security.app-sandbox raw -o - "$1" 2>/dev/null)" = "true" ]; }
+          # PlistBuddy, not `plutil -extract`: plutil reads the dots in
+          # com.apple.security.app-sandbox as a key path and never finds it.
+          sandbox_on() { [ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$1" 2>/dev/null)" = "true" ]; }
 
           for f in macos/Runner/Release.entitlements macos/Runner/DebugProfile.entitlements; do
             plutil -lint "$f"
