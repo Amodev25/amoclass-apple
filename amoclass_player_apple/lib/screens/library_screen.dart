@@ -1628,6 +1628,16 @@ class _LibraryScreenState extends State<LibraryScreen>
     }
   }
 
+  /// Up ONE folder level in the online tab ('' is the cloud root).
+  void _remoteFolderUp() {
+    final slash = _remoteCurrentFolder.lastIndexOf('/');
+    setState(() {
+      _remoteCurrentFolder = slash < 0
+          ? ''
+          : _remoteCurrentFolder.substring(0, slash);
+    });
+  }
+
   Widget _buildOnlineTab() {
     List<RemoteFile> visibleFiles = _remoteCurrentFolder.isEmpty
         ? _remoteCatalog.rootFiles
@@ -1652,64 +1662,25 @@ class _LibraryScreenState extends State<LibraryScreen>
           color: AppColors.scaffoldBg,
           child: Row(
             children: [
+              if (_remoteCurrentFolder.isNotEmpty) ...[
+                IconButton(
+                  onPressed: _remoteFolderUp,
+                  tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                  icon: Icon(Icons.adaptive.arrow_back, color: Colors.white),
+                ),
+                const SizedBox(width: 4),
+              ],
               Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => setState(() => _remoteCurrentFolder = ''),
-                        child: Icon(
-                          Icons.cloud_rounded,
-                          size: 18,
-                          color: _remoteCurrentFolder.isEmpty
-                              ? AppColors.onlineAccent
-                              : AppColors.onlineAccent.withValues(alpha: 0.6),
-                        ),
-                      ),
-                      if (_remoteCurrentFolder.isNotEmpty) ...[
-                        ..._remoteCurrentFolder.split('/').asMap().entries.map((
-                          entry,
-                        ) {
-                          final i = entry.key;
-                          final part = entry.value;
-                          final path = _remoteCurrentFolder
-                              .split('/')
-                              .take(i + 1)
-                              .join('/');
-                          final isLast =
-                              i == _remoteCurrentFolder.split('/').length - 1;
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.chevron_right,
-                                size: 16,
-                                color: Colors.white.withValues(alpha: 0.3),
-                              ),
-                              GestureDetector(
-                                onTap: () =>
-                                    setState(() => _remoteCurrentFolder = path),
-                                child: Text(
-                                  part,
-                                  style: TextStyle(
-                                    color: isLast
-                                        ? Colors.white
-                                        : AppColors.onlineAccent.withValues(
-                                            alpha: 0.7,
-                                          ),
-                                    fontSize: 13,
-                                    fontWeight: isLast
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        }),
-                      ],
-                    ],
+                child: Text(
+                  _remoteCurrentFolder.isEmpty
+                      ? ''
+                      : _remoteCurrentFolder.split('/').last,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
