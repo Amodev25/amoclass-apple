@@ -1863,6 +1863,8 @@ class _LibraryScreenState extends State<LibraryScreen>
     final count = _remoteCatalog.filesInFolder(folder).length;
     return _AnimatedListItem(
       child: GestureDetector(
+        // The whole row answers a tap, not just the painted text.
+        behavior: HitTestBehavior.opaque,
         onTap: () => setState(() => _remoteCurrentFolder = folder),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -1917,6 +1919,8 @@ class _LibraryScreenState extends State<LibraryScreen>
 
     return _AnimatedListItem(
       child: GestureDetector(
+        // The whole row answers a tap, not just the painted text.
+        behavior: HitTestBehavior.opaque,
         onTap: isDone
             ? () async {
                 final localPath = await RemoteLibraryService.findLocalFile(
