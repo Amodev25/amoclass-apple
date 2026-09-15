@@ -14,14 +14,11 @@ dependencies:
     sdk: flutter
   intl: any
 
-  # Shared core library
-  amo_core:
-    path: ../amoclass_core
-
   # Apple platform layer: anti-capture, audio output, storage and the
   # amo:// in-process decryption channel (replaces the Android MainActivity).
+  # Kept as a local plugin inside this folder so the project is self-contained.
   amo_platform_apple:
-    path: ../amo_platform_apple
+    path: packages/amo_platform_apple
 
   cupertino_icons: ^1.0.8
   media_kit: ^1.2.6
@@ -52,3 +49,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # AmoL10n is generated from lib/amo_core/l10n (see l10n.yaml).
+  generate: true

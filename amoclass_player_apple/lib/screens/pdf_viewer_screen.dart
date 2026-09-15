@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../core/decryption_service.dart';
 import '../services/auth_service.dart';
-import 'package:amo_core/amo_core.dart';
+import 'package:amo_player_apple/amo_core/amo_core.dart';
 
 class PdfViewerScreen extends StatefulWidget {
   final VideoItem document;

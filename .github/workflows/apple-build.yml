@@ -8,20 +8,15 @@ on:
   push:
     branches: [main, master]
     paths:
+      # Everything the Apple app needs lives in this one folder: the shared
+      # core (lib/amo_core), the native plugin (packages/) and the
+      # verification script (scripts/).
       - 'amoclass_player_apple/**'
-      - 'amo_platform_apple/**'
-      - 'amoclass_core/**'
       - '.github/workflows/apple-build.yml'
-      # The verification step runs this script, so a change to it must rebuild
-      # — otherwise a fix to the check silently never runs.
-      - 'scripts/**'
   pull_request:
     paths:
       - 'amoclass_player_apple/**'
-      - 'amo_platform_apple/**'
-      - 'amoclass_core/**'
       - '.github/workflows/apple-build.yml'
-      - 'scripts/**'
   workflow_dispatch:
 
 concurrency:
@@ -49,14 +44,6 @@ jobs:
         run: flutter pub get
       - name: Analyze
         working-directory: amoclass_player_apple
-        run: flutter analyze
-      # The shared package is compiled into this app, so a break there is a
-      # break here too.
-      - name: Install dependencies (amoclass_core)
-        working-directory: amoclass_core
-        run: flutter pub get
-      - name: Analyze amoclass_core
-        working-directory: amoclass_core
         run: flutter analyze
       - name: Unit tests
         working-directory: amoclass_player_apple
@@ -123,7 +110,7 @@ jobs:
         working-directory: amoclass_player_apple
         env:
           ROOT: build/macos/Build/Products/Debug
-        run: bash ../scripts/verify_native_symbols.sh "$ROOT"
+        run: bash scripts/verify_native_symbols.sh "$ROOT"
 
       # Uploaded BEFORE the smoke test on purpose: if the app turns out not to
       # launch, the thing you need in order to debug that is the app itself.
@@ -277,7 +264,7 @@ jobs:
         working-directory: amoclass_player_apple
         env:
           ROOT: build/ios/iphonesimulator
-        run: bash ../scripts/verify_native_symbols.sh "$ROOT"
+        run: bash scripts/verify_native_symbols.sh "$ROOT"
 
       # Zipped with ditto so the executable bit survives upload-artifact. This
       # zip is also what browser simulators (e.g. Appetize) accept: upload it
@@ -339,7 +326,7 @@ jobs:
 
       - name: Verify the native decryptor linked in
         working-directory: amoclass_player_apple
-        run: bash ../scripts/verify_native_symbols.sh build/ios/iphoneos
+        run: bash scripts/verify_native_symbols.sh build/ios/iphoneos
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4

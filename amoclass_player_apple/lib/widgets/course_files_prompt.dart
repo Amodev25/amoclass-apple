@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:amo_core/amo_core.dart';
+import 'package:amo_player_apple/amo_core/amo_core.dart';
 import 'package:flutter/material.dart';
 
 import '../services/course_files_service.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:amo_core/amo_core.dart';
+import 'package:amo_player_apple/amo_core/amo_core.dart';
 import 'package:amo_player_apple/screens/login_screen.dart';
 import 'package:amo_player_apple/services/auth_service.dart';
 import 'package:amo_player_apple/services/session_service.dart';

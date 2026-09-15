@@ -14,7 +14,7 @@ import 'screens/course_select_screen.dart';
 import 'screens/re_verify_screen.dart';
 import 'core/anti_capture.dart';
 import 'core/decryption_service.dart';
-import 'package:amo_core/amo_core.dart';
+import 'package:amo_player_apple/amo_core/amo_core.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

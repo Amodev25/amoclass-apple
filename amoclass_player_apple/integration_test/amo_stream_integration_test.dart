@@ -11,7 +11,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'package:amo_core/core/constants.dart';
+import 'package:amo_player_apple/amo_core/core/constants.dart';
 import 'package:amo_player_apple/core/amo_native_bridge.dart';
 import 'package:amo_player_apple/core/decryption_service.dart';
 

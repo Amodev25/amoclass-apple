@@ -8,7 +8,7 @@ import '../core/decryption_service.dart';
 import '../core/amo_native_bridge.dart';
 import 'library_screen.dart';
 import 'login_screen.dart';
-import 'package:amo_core/amo_core.dart';
+import 'package:amo_player_apple/amo_core/amo_core.dart';
 
 /// Always shown when the app opens with a valid session.
 /// Displays course names (teacher names) — user taps one to enter.

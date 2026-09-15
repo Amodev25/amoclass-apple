@@ -7,11 +7,11 @@ import 'package:crypto/crypto.dart' as crypto_lib;
 import 'package:path_provider/path_provider.dart';
 import 'constants.dart';
 import '../services/auth_service.dart';
-import 'package:amo_core/core/amo_exceptions.dart';
+import 'package:amo_player_apple/amo_core/core/amo_exceptions.dart';
 
 // Typed AMO exceptions live in the shared package so both players — and,
 // once localized, one .arb entry each — use the same four strings.
-export 'package:amo_core/core/amo_exceptions.dart';
+export 'package:amo_player_apple/amo_core/core/amo_exceptions.dart';
 
 /// Parsed AMO file header
 class AmoFileHeader {

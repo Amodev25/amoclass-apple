@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import '../services/session_service.dart';
 import 'course_select_screen.dart';
-import 'package:amo_core/amo_core.dart';
+import 'package:amo_player_apple/amo_core/amo_core.dart';
 import '../core/platform_ui.dart';
 import '../services/course_files_service.dart';
 import '../widgets/course_files_prompt.dart';

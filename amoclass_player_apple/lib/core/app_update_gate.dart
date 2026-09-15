@@ -1,4 +1,4 @@
-import 'package:amo_core/amo_core.dart';
+import 'package:amo_player_apple/amo_core/amo_core.dart';
 import 'package:flutter/material.dart';
 
 /// The blocking "update required" dialog.

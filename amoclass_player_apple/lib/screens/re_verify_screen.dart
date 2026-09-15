@@ -5,7 +5,7 @@ import '../services/library_service.dart';
 import '../core/decryption_service.dart';
 import '../core/amo_native_bridge.dart';
 import 'library_screen.dart';
-import 'package:amo_core/amo_core.dart';
+import 'package:amo_player_apple/amo_core/amo_core.dart';
 import '../widgets/course_files_prompt.dart';
 
 /// Password-only re-verification screen for Android.

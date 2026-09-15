@@ -28,7 +28,7 @@
 
 ## ٢. ما الذي بُني فعليًا
 
-### أ. حزمة المنصة الأصلية — `amo_platform_apple/`
+### أ. حزمة المنصة الأصلية — `amoclass_player_apple/packages/amo_platform_apple/`
 
 إضافة (plugin) فيدرالية واحدة تخدم النظامين معًا عبر شجرة مصدر واحدة:
 
@@ -114,7 +114,7 @@ static String get current => Platform.isMacOS ? macos : ios;
 
 بناء ناجح **لا يثبت** أن كود C وصل إلى البرنامج. لو توقف نمط المصادر في الـ podspec عن مطابقة ملفات `.c` يومًا ما، التطبيق يُبنى ويُثبَّت بنجاح ولا يظهر العطل إلا حين يضغط الطالب "تشغيل".
 
-لذلك `scripts/verify_native_symbols.sh` يفحص **كل** ملف Mach-O داخل الحزمة ويطالب بوجود ثلاثة رموز مُعرَّفة:
+لذلك `amoclass_player_apple/scripts/verify_native_symbols.sh` يفحص **كل** ملف Mach-O داخل الحزمة ويطالب بوجود ثلاثة رموز مُعرَّفة:
 
 ```
 _amo_register_protocol   _amo_open   _amo_set_content_key
@@ -349,7 +349,7 @@ cd apps && git add -A && git commit -m "..." && git push origin main
 
 ## ١٠. تحذير أمني قائم
 
-`amoclass_core/lib/core/constants.dart` يحتوي **مفتاح التشفير الرئيسي** على هيئة أربع مصفوفات بايت مقنّعة بـ XOR.
+`amoclass_player_apple/lib/amo_core/core/constants.dart` يحتوي **مفتاح التشفير الرئيسي** على هيئة أربع مصفوفات بايت مقنّعة بـ XOR.
 
 مستودع `Amodev25/amoclass-apple` **يجب أن يبقى خاصًا (Private)**. إن صار عامًا ولو للحظة واحدة، يُعامل المفتاح على أنه **مسرَّب**، وتجب إعادة تشفير كل المحتوى.
 

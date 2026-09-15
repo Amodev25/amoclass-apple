@@ -17,7 +17,7 @@ import 'player_screen.dart';
 import 'pdf_viewer_screen.dart';
 import 'course_select_screen.dart';
 import 're_verify_screen.dart';
-import 'package:amo_core/amo_core.dart';
+import 'package:amo_player_apple/amo_core/amo_core.dart';
 
 enum SortOption {
   nameAsc,

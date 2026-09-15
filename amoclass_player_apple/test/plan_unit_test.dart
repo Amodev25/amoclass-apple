@@ -2,7 +2,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:amo_core/core/constants.dart';
+import 'package:amo_player_apple/amo_core/core/constants.dart';
 import 'package:amo_player_apple/core/decryption_service.dart';
 
 /// v2 pattern-encryption math for the Android player.

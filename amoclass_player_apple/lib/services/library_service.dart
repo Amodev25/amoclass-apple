@@ -1,4 +1,4 @@
-import 'package:amo_core/amo_core.dart';
+import 'package:amo_player_apple/amo_core/amo_core.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
